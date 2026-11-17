@@ -1,0 +1,35 @@
+/* Quest Kids — complementos ao Tailwind do Stitch (cores em temas.css) */
+html, body { margin: 0; }
+body { font-family: 'Nunito Sans', system-ui, sans-serif; background-color: rgb(var(--c-surface)); color: rgb(var(--c-on-surface)); min-height: 100dvh; -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; }
+button { cursor: pointer; } button:disabled { opacity: .45; cursor: default; }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); } .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+.material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 500; line-height: 1; vertical-align: middle; user-select: none; display: inline-block; width: 1em; min-width: 1em; overflow: hidden; white-space: nowrap; flex-shrink: 0; direction: ltr; }
+.fill { font-variation-settings: 'FILL' 1, 'wght' 500 !important; }
+.no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { scrollbar-width: none; }
+
+/* botão "de apertar" do Stitch, com a cor de sombra de cada estilo */
+.btn3d { box-shadow: 0 4px 0 rgb(var(--c-shadow-btn)); transition: transform .12s, box-shadow .12s; }
+.btn3d:active:not(:disabled) { transform: translateY(4px); box-shadow: none; }
+.btn3d-sm { box-shadow: 0 3px 0 rgb(var(--c-shadow-btn)); } .btn3d-sm:active { transform: translateY(3px); box-shadow: none; }
+.soft-shadow { box-shadow: 0 4px 20px rgb(var(--c-primary-container) / .08); }
+
+/* palavras do texto que abrem o significado */
+.word { display: inline; padding: 1px 6px; border-radius: 8px; background: rgb(var(--c-secondary-fixed)); color: rgb(var(--c-on-secondary-fixed)); font-weight: 800; cursor: pointer; }
+
+/* Ligue os pontos */
+.match-wrap { position: relative; }
+.match-wrap svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; overflow: visible; }
+.match-wrap button { position: relative; z-index: 2; }
+.shake { animation: shake .35s; } @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+
+/* confete da lição completa (do Stitch) */
+.confetti-particle { position: absolute; opacity: 0; animation-name: confetti-fall; animation-timing-function: linear; animation-iteration-count: infinite; }
+@keyframes confetti-fall { 0% { transform: translate(0, 0) rotate(0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(var(--sway-x), 280px) rotate(var(--rot)); opacity: 0; } }
+
+/* toast e carregando */
+#toast { position: fixed; left: 50%; bottom: 104px; transform: translate(-50%, 30px); background: rgb(var(--c-inverse-surface)); color: rgb(var(--c-inverse-on-surface)); padding: 12px 18px; border-radius: 16px; font-weight: 700; opacity: 0; pointer-events: none; transition: .25s; z-index: 99; max-width: 90vw; text-align: center; }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+.spin { width: 44px; height: 44px; border-radius: 50%; border: 4px solid rgb(var(--c-surface-container-high)); border-top-color: rgb(var(--c-primary-container)); animation: rot 1s linear infinite; margin: 30vh auto 0; }
+@keyframes rot { to { transform: rotate(360deg); } }
+input[type=range] { accent-color: rgb(var(--c-primary-container)); width: 100%; }
+#app .grid > * { min-width: 0; }

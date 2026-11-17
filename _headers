@@ -1,0 +1,15 @@
+/*
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: microphone=(self), camera=(self), geolocation=()
+  Strict-Transport-Security: max-age=31536000
+
+/app/*
+  Cache-Control: no-cache
+
+/*.html
+  Cache-Control: no-cache
+
+/app/pacotes/*/modules/*
+  Cache-Control: public, max-age=604800

@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="pt-BR" data-style="moderno">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Quest Kids · Cadastro</title>
+<meta name="description" content="Cadastro do app de reforço escolar personalizado Quest Kids.">
+<meta name="theme-color" content="#14a3a3">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⭐</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@600;800&family=Baloo+2:wght@600;800&family=Fredoka:wght@500;700&family=Orbitron:wght@700;900&family=Nunito:wght@400;600;800&display=swap">
+<style>
+/* Layout: one centered wizard card, one question per step; the whole page re-skins live to the screen style the parent picks (Moderno · Fofinho · Exploradora · Espaço) */
+:root{
+  --bg:#f3f6fb; --bg2:#f3f6fb; --card:#ffffff; --ink:#18233a; --soft:#5d6b85; --line:#dbe3ef; --chip:#eef2f8;
+  --kid:#14a3a3; --kidInk:#ffffff; --ok:#1f9d5a; --bad:#c0392b; --radius:20px;
+  --display:"Plus Jakarta Sans",system-ui,-apple-system,sans-serif; --body:"Nunito",system-ui,-apple-system,sans-serif;
+  --pattern:none; color-scheme:light;
+}
+/* Moderno follows the device's light/dark setting */
+@media (prefers-color-scheme:dark){html[data-style="moderno"]{--bg:#0f1522;--bg2:#0f1522;--card:#18213a;--ink:#eef3ff;--soft:#a6b3cc;--line:#2c3a59;--chip:#212c47;--ok:#4cc98a;--bad:#ff7b6b;color-scheme:dark}}
+/* Fofinho: pastel, extra round, polka dots */
+html[data-style="fofinho"]{--bg:#fff1f7;--bg2:#fff1f7;--card:#ffffff;--ink:#4a2b4f;--soft:#8a6790;--line:#f6cfe3;--chip:#fde7f2;--radius:30px;
+  --display:"Baloo 2","Trebuchet MS",system-ui,sans-serif;--pattern:radial-gradient(#f9c9df 2px,transparent 2.5px) 0 0/26px 26px}
+/* Exploradora: parchment map with grid lines */
+html[data-style="exploradora"]{--bg:#efe3c8;--bg2:#efe3c8;--card:#fffaf0;--ink:#3b2f1e;--soft:#7a6748;--line:#d9c6a0;--chip:#f5ead3;--radius:14px;
+  --display:"Fredoka",system-ui,sans-serif;--pattern:linear-gradient(#e2d3b1 1px,transparent 1px) 0 0/34px 34px,linear-gradient(90deg,#e2d3b1 1px,transparent 1px) 0 0/34px 34px}
+/* Espaço: deep night sky with stars */
+html[data-style="espaco"]{--bg:#0a0f24;--bg2:#0a0f24;--card:#141b3a;--ink:#e9ecff;--soft:#a3abd6;--line:#2a3566;--chip:#1d2650;--ok:#5be39b;--bad:#ff7b8a;--radius:18px;
+  --display:"Orbitron","Trebuchet MS",system-ui,sans-serif;color-scheme:dark;
+  --pattern:radial-gradient(1.5px 1.5px at 20px 30px,#fff 50%,transparent 51%) 0 0/140px 140px,radial-gradient(1px 1px at 90px 80px,#cfd6ff 50%,transparent 51%) 0 0/140px 140px,radial-gradient(1.2px 1.2px at 60px 120px,#fff 50%,transparent 51%) 0 0/200px 200px}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--pattern),var(--bg);background-attachment:fixed;color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:calc(20px + env(safe-area-inset-top,0px)) calc(40px + env(safe-area-inset-bottom,0px));min-height:100vh;transition:background-color .3s,color .3s}
+.wrap{max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:center;gap:12px}
+.logo{width:46px;height:46px;border-radius:calc(var(--radius) * .7);background:var(--kid);color:var(--kidInk);display:grid;place-items:center;font-size:24px;flex:none;transition:background .3s}
+.brand{flex:1;min-width:0}
+h1{font-family:var(--display);font-size:26px;line-height:1.1;margin:0;text-wrap:balance}
+html[data-style="espaco"] h1,html[data-style="espaco"] h2{letter-spacing:.02em}
+.sub{color:var(--soft);font-size:14px;margin:0}
+.snd{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;width:44px;height:44px;font-size:20px;cursor:pointer;flex:none}
+.bar{height:10px;background:var(--line);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--kid);border-radius:99px;transition:width .35s,background .3s}
+.steplbl{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft);font-weight:800}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:22px;display:flex;flex-direction:column;gap:14px}
+html[data-style="exploradora"] .card{border:2px dashed var(--line)}
+html[data-style="fofinho"] .card{box-shadow:0 6px 0 #f6cfe3}
+html[data-style="espaco"] .card{box-shadow:0 0 0 1px #2a3566,0 10px 40px #0008}
+h2{font-family:var(--display);font-size:23px;line-height:1.2;margin:0;text-wrap:balance}
+.help{color:var(--soft);margin:0;font-size:15px}
+label.f{display:flex;flex-direction:column;gap:6px;font-weight:800;font-size:14px}
+input[type=text],input[type=email],select,textarea{font:inherit;font-weight:600;color:var(--ink);background:var(--bg2);border:2px solid var(--line);border-radius:calc(var(--radius) * .6);padding:12px 14px;width:100%}
+textarea{min-height:96px;resize:vertical}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:3px solid var(--kid);outline-offset:2px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:460px){.row{grid-template-columns:1fr}}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:inherit;font-weight:800;font-size:15px;border:2px solid var(--line);background:var(--chip);color:var(--ink);border-radius:99px;padding:9px 14px;cursor:pointer;text-align:left}
+.chip[aria-pressed="true"]{background:var(--kid);border-color:var(--kid);color:var(--kidInk)}
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.sw{width:44px;height:44px;border-radius:50%;border:3px solid var(--card);box-shadow:0 0 0 2px var(--line);cursor:pointer}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 3px var(--ink)}
+.styles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:420px){.styles{grid-template-columns:1fr}}
+.stc{font:inherit;text-align:left;cursor:pointer;border:2px solid var(--line);border-radius:16px;padding:0;overflow:hidden;background:var(--card);color:var(--ink)}
+.stc[aria-pressed="true"]{border-color:var(--kid);box-shadow:0 0 0 3px var(--kid)}
+.stc .mini{height:74px;display:flex;align-items:center;justify-content:center;gap:8px;font-size:28px}
+.stc .lbl{padding:8px 12px;font-weight:800;font-size:15px;display:block}
+.stc .lbl small{display:block;font-weight:600;color:var(--soft);font-size:12.5px;line-height:1.3}
+.mini.moderno{background:linear-gradient(#f3f6fb,#f3f6fb);color:#18233a}.mini.moderno span{font:800 15px "Plus Jakarta Sans",sans-serif;background:#18233a;color:#fff;border-radius:10px;padding:6px 10px}
+.mini.fofinho{background:radial-gradient(#f9c9df 2px,transparent 2.5px) 0 0/16px 16px,#fff1f7}
+.mini.exploradora{background:linear-gradient(#e2d3b1 1px,transparent 1px) 0 0/18px 18px,linear-gradient(90deg,#e2d3b1 1px,transparent 1px) 0 0/18px 18px,#efe3c8}
+.mini.espaco{background:radial-gradient(1.5px 1.5px at 10px 12px,#fff 50%,transparent 51%) 0 0/36px 36px,#0a0f24}
+.nav{display:flex;gap:10px}
+.btn{font:inherit;font-weight:800;font-size:16px;border:0;border-radius:calc(var(--radius) * .7);padding:13px 20px;cursor:pointer}
+.btn.go{background:var(--kid);color:var(--kidInk);flex:1}
+.btn.back{background:var(--chip);color:var(--ink)}
+.btn:disabled{opacity:.5;cursor:wait}
+.err{color:var(--bad);font-weight:800;font-size:14px;margin:0}
+.preview{border-radius:var(--radius);padding:16px;background:var(--kid);color:var(--kidInk);display:flex;gap:14px;align-items:center;transition:background .3s}
+.preview .em{font-size:40px;line-height:1}
+.preview b{font-family:var(--display);font-size:20px;display:block;line-height:1.15}
+.preview small{opacity:.92;font-weight:700;display:block}
+.preview .meta{font-size:13px;opacity:.85}
+ol.steps{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:4px}
+.note{background:var(--chip);border-radius:calc(var(--radius) * .6);padding:12px 14px;font-size:14px}
+.cons{display:flex;gap:10px;align-items:flex-start;font-size:14px;color:var(--soft);font-weight:600}
+.cons input{width:22px;height:22px;flex:none;margin-top:2px;accent-color:var(--kid)}
+.drop{border:2px dashed var(--line);border-radius:calc(var(--radius) * .6);padding:16px;text-align:center;background:var(--bg2);cursor:pointer;font-weight:800}
+.drop input{display:none}
+.files{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.files li{display:flex;align-items:center;gap:8px;background:var(--chip);border-radius:12px;padding:8px 10px;font-size:14px}
+.files li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.files li button{border:0;background:none;color:var(--bad);font-weight:800;cursor:pointer;font-size:14px}
+.sum{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:15px;margin:0}
+.sum dt{color:var(--soft);font-weight:800}.sum dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.done{text-align:center;align-items:center}
+.done .big{font-size:56px}
+.status{font-size:14px;color:var(--soft);margin:0}
+.status.ok{color:var(--ok);font-weight:800}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+footer{text-align:center;color:var(--soft);font-size:12.5px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="logo" id="logo">⭐</div><div class="brand"><h1>Quest Kids</h1><p class="sub">Cadastro do app de reforço personalizado · uns 4 minutos</p></div>
+    <button type="button" class="snd" id="snd" aria-label="Som dos cliques">🔊</button></header>
+  <div class="preview" id="preview" aria-live="polite"><div class="em" id="pvEm">⭐</div><div><b id="pvTitle">Olá, exploradora!</b><small id="pvSub">O app vai ficar com a cara dela conforme você responde.</small><span class="meta" id="pvMeta"></span></div></div>
+  <div><div class="steplbl" id="steplbl">Passo 1</div><div class="bar"><i id="bar"></i></div></div>
+  <form class="card" id="card" novalidate></form>
+  <footer>🔒 Seus dados ficam guardados com segurança e só são usados para montar o app da sua filha.</footer>
+</div>
+<script src="config.js"></script>
+<script>
+(function(){
+'use strict';
+const C=Object.assign({MAX_ARQUIVOS:30,MAX_MB:50,MAX_TOTAL_MB:100,NOME_CONTATO:'Paula'},window.QK_CONFIG||{});
+const LIVE=!!(C.SUPABASE_URL&&C.SUPABASE_ANON_KEY);
+
+const STYLES=[
+  {id:'moderno',nome:'Moderno',desc:'Limpo, como um app de verdade. Ótimo para 10 a 14 anos.',mini:'<span>Lição 3/5</span>✨',prog:'barra de progresso e níveis'},
+  {id:'fofinho',nome:'Fofinho',desc:'Cores pastel, bichinhos e adesivos. Ótimo para 6 a 9 anos.',mini:'🦄🌸⭐',prog:'⭐ adesivos para colecionar'},
+  {id:'exploradora',nome:'Exploradora',desc:'Mapa, passaporte com carimbos e baú de tesouro.',mini:'🗺️🧭🛂',prog:'🛂 carimbos no passaporte'},
+  {id:'espaco',nome:'Espaço',desc:'Céu estrelado, cada lição é um planeta.',mini:'🚀🪐✨',prog:'🪐 planetas e cristais'}];
+const THEMES=[['🦄','Unicórnio'],['🎀','Bonecas'],['⚽','Futebol'],['🐶','Bichinhos'],['🧜‍♀️','Sereias'],['🚀','Espaço'],['🦕','Dinossauros'],['🎨','Arte'],['🎵','Música'],['✨','Outro']];
+const COLORS=[['#e84393','Rosa'],['#8e44ad','Roxo'],['#2e86de','Azul'],['#14a3a3','Turquesa'],['#27ae60','Verde'],['#e67e22','Laranja'],['#d63031','Vermelho'],['#b8862f','Dourado']];
+const SUBJECTS=['📖 Português: leitura','✍️ Português: escrita e gramática','🔢 Matemática','🔬 Ciências','🌎 História e Geografia','🇺🇸 Inglês'];
+const TOPICS=['🌊 Oceanos e corais','💡 Inventores brasileiros','🦕 Dinossauros','🚀 Espaço e planetas','🌳 Amazônia','🪶 Povos indígenas','🏛️ Egito Antigo','🐾 Animais','🔬 Experiências de ciências','💰 Dinheiro para crianças'];
+const PERFIL=['📖 Lê rápido, mas não entende o texto','🔢 Tem dificuldade com frações','✖️ Erra na tabuada e nas contas básicas','✍️ Escreve com erros de ortografia','🧩 Se distrai fácil e perde o foco','😟 Fica nervosa quando erra','🏆 Adora desafios e competição','🎧 Aprende melhor ouvindo','🎨 Aprende melhor com imagens','🐢 Faz as lições devagar'];
+const FREQ=['📅 Toda semana','🗓️ A cada 15 dias','📊 Uma vez por mês'];
+const DAYS=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
+const MAT=[['📎','Anexar aqui agora'],['📲','Mandar pelo WhatsApp depois']];
+
+const A={resp:'',apelido:'',idade:'',serie:'',estilo:'moderno',tema:'',temaOutro:'',cor:'#14a3a3',corNome:'Turquesa',materias:[],temas:[],temaLivre:'',
+  minutos:'20 min',dias:['Seg','Ter','Qua','Qui','Sex'],perfil:[],dificuldade:'',email:'',freq:['📅 Toda semana'],consent:false,material:'Anexar aqui agora',som:true};
+try{Object.assign(A,JSON.parse(localStorage.getItem('qk-draft')||'{}'))}catch(e){}
+let FILES=[]; let step=0; let sending=false;
+const card=document.getElementById('card');
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const save=()=>{try{const x=Object.assign({},A);localStorage.setItem('qk-draft',JSON.stringify(x))}catch(e){}};
+const temaNome=()=>A.tema==='Outro'?A.temaOutro.trim():A.tema;
+const emoji=()=>(THEMES.find(t=>t[1]===A.tema)||['⭐'])[0];
+
+/* ---- som dos cliques ---- */
+let AC=null;
+function blip(kind){
+  if(!A.som)return;
+  try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();const o=AC.createOscillator(),g=AC.createGain();
+    const f={tap:660,ok:880,back:440,done:990}[kind||'tap'];o.type='sine';o.frequency.setValueAtTime(f,AC.currentTime);
+    if(kind==='done')o.frequency.exponentialRampToValueAtTime(1480,AC.currentTime+.18);
+    g.gain.setValueAtTime(.0001,AC.currentTime);g.gain.exponentialRampToValueAtTime(.12,AC.currentTime+.01);g.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+(kind==='done'?.3:.09));
+    o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+.32)}catch(e){}
+}
+const sndBtn=document.getElementById('snd');
+function paintSnd(){sndBtn.textContent=A.som?'🔊':'🔇';sndBtn.setAttribute('aria-pressed',String(A.som));sndBtn.title=A.som?'Som ligado (toque para silenciar)':'Sem som (toque para ligar)'}
+sndBtn.onclick=()=>{A.som=!A.som;save();paintSnd();blip('ok')};
+
+const chips=(list,key,multi,max)=>`<div class="chips">${list.map(x=>{const v=Array.isArray(x)?x[1]:x,l=Array.isArray(x)?x[0]+' '+x[1]:x;const on=multi?A[key].includes(v):A[key]===v;
+  return`<button type="button" class="chip" data-k="${key}" data-v="${esc(v)}" data-m="${multi?1:0}" data-max="${max||0}" aria-pressed="${on}">${esc(l)}</button>`}).join('')}</div>`;
+const totalBytes=()=>FILES.reduce((a,f)=>a+f.size,0);
+const fmtMB=b=>(b/1048576).toFixed(b<1048576?2:1)+' MB';
+
+const STEPS=[
+ {t:'Vamos começar! 👋',h:'Este cadastro monta um app de reforço escolar só para a sua filha, com o material da escola dela.',
+  b:()=>`<label class="f">Seu primeiro nome<input type="text" id="resp" autocomplete="given-name" maxlength="60" value="${esc(A.resp)}" placeholder="Ex.: Marcos"></label>
+  <input class="hp" type="text" id="site" tabindex="-1" autocomplete="off" aria-hidden="true">
+  <p class="note">🔒 Não pedimos nome completo, escola nem endereço. Só um apelido para a criança.</p>`,
+  ok:()=>A.resp.trim()?true:'Escreva seu primeiro nome.'},
+ {t:'Quem vai usar o app?',h:'O app chama a criança pelo apelido.',
+  b:()=>`<label class="f">Apelido da criança<input type="text" id="apelido" maxlength="40" value="${esc(A.apelido)}" placeholder="Ex.: Bia"></label>
+  <div class="row"><label class="f">Idade<select id="idade"><option value="">Escolha</option>${[5,6,7,8,9,10,11,12,13,14].map(n=>`<option ${A.idade==n?'selected':''}>${n}</option>`).join('')}</select></label>
+  <label class="f">Ano escolar<select id="serie"><option value="">Escolha</option>${['1º ano','2º ano','3º ano','4º ano','5º ano','6º ano','7º ano','8º ano','9º ano'].map(n=>`<option ${A.serie==n?'selected':''}>${n}</option>`).join('')}</select></label></div>`,
+  ok:()=>!A.apelido.trim()?'Escreva o apelido.':!A.idade?'Escolha a idade.':!A.serie?'Escolha o ano escolar.':true},
+ {t:'Escolha o estilo da tela',h:'É assim que o app vai ficar para ela. Toque para ver esta página mudar! Ela também pode trocar depois, nas configurações do app.',
+  b:()=>`<div class="styles">${STYLES.map(s=>`<button type="button" class="stc" data-st="${s.id}" aria-pressed="${A.estilo===s.id}"><div class="mini ${s.id}">${s.mini}</div><span class="lbl">${s.nome}<small>${s.desc}</small></span></button>`).join('')}</div>`,
+  ok:()=>true},
+ {t:'Do que ela mais gosta?',h:'Escolha o tema favorito e a cor favorita. Veja a prévia lá em cima!',
+  b:()=>`${chips(THEMES,'tema',false)}${A.tema==='Outro'?`<label class="f">Qual tema?<input type="text" id="temaOutro" maxlength="40" value="${esc(A.temaOutro)}" placeholder="Ex.: gatinhos, K-pop, cavalos…"></label>`:''}
+  <div class="steplbl">Cor favorita</div><div class="swatches">${COLORS.map(([c,n])=>`<button type="button" class="sw" style="background:${c}" data-c="${c}" data-n="${n}" aria-label="${n}" aria-pressed="${A.cor===c}"></button>`).join('')}</div>`,
+  ok:()=>!A.tema?'Escolha um tema.':(A.tema==='Outro'&&!A.temaOutro.trim())?'Escreva qual é o tema.':true},
+ {t:'Em que matérias ela precisa de reforço?',h:'Pode escolher mais de uma.',
+  b:()=>chips(SUBJECTS,'materias',true),ok:()=>A.materias.length?true:'Escolha pelo menos uma matéria.'},
+ {t:'Que assuntos ela gosta de ler?',h:'Além da matéria da escola, o app traz leituras e aulas em áudio sobre temas gerais, para ganhar vocabulário e conhecer o mundo. Escolha até 3.',
+  b:()=>`${chips(TOPICS,'temas',true,3)}<label class="f">Outro assunto (opcional)<input type="text" id="temaLivre" maxlength="60" value="${esc(A.temaLivre)}" placeholder="Ex.: Olimpíadas, vulcões…"></label>`,
+  ok:()=>(A.temas.length||A.temaLivre.trim())?true:'Escolha pelo menos um assunto.'},
+ {t:'Quanto tempo por dia?',h:'Sugerimos de 15 a 20 minutos nos dias de escola.',
+  b:()=>`${chips(['10 min','15 min','20 min','25 min','30 min'],'minutos',false)}<div class="steplbl">Em quais dias?</div>${chips(DAYS,'dias',true)}`,
+  ok:()=>A.dias.length?true:'Escolha pelo menos um dia.'},
+ {t:'Conte um pouco sobre ela',h:'Marque o que combina com ela (quantos quiser). Isso ajuda a montar o reforço do jeito certo.',
+  b:()=>`${chips(PERFIL,'perfil',true)}<label class="f">Quer contar mais alguma coisa? (opcional)<textarea id="dificuldade" maxlength="2000" placeholder="Ex.: está aprendendo divisão na escola; gosta de ler em voz alta…">${esc(A.dificuldade)}</textarea></label>`,ok:()=>true},
+ {t:'Relatórios para você 📬',h:'Você recebe por e-mail um resumo de como ela está indo: notas, matérias e o que precisa de atenção. Escolha a frequência (pode marcar mais de uma).',
+  b:()=>`<label class="f">Seu e-mail<input type="email" id="email" autocomplete="email" inputmode="email" maxlength="120" value="${esc(A.email)}" placeholder="voce@email.com"></label>
+  ${chips(FREQ,'freq',true)}
+  <label class="cons"><input type="checkbox" id="consent" ${A.consent?'checked':''}> <span>Autorizo o uso destas informações para criar e acompanhar o app de reforço da minha filha. Os dados não são compartilhados com ninguém e posso pedir para apagar a qualquer momento.</span></label>`,
+  ok:()=>!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(A.email.trim())?'Escreva um e-mail válido.':!A.freq.length?'Escolha pelo menos uma frequência.':!A.consent?'Marque a autorização para continuar.':true},
+ {t:'Agora, o material da escola 📚',h:'De 10 a 15 páginas do que ela está estudando: lições do livro ou da apostila e exercícios que ela já fez, inclusive os que errou (pode ser com a letra dela). A inteligência artificial lê tudo e monta o reforço.',
+  b:()=>`<details class="note"><summary><b>📱 Como escanear pelo iPhone</b></summary><ol class="steps"><li>Abra o app <b>Arquivos</b> (Files)</li><li>Toque nos <b>três pontinhos (•••)</b> no canto de cima</li><li>Escolha <b>Escanear Documentos</b></li><li>Aponte para a página: ele tira a foto sozinho. Passe para a próxima e toque em <b>Salvar</b></li></ol></details>
+  <p class="help">👉 Marque com um X ou círculo os exercícios que ela errou. Assim sabemos exatamente onde reforçar.</p>
+  ${chips(MAT,'material',false)}
+  ${A.material==='Anexar aqui agora'?`<label class="drop" for="up">📎 Toque para escolher os arquivos<br><small style="font-weight:600;color:var(--soft)">PDF ou fotos · até ${C.MAX_TOTAL_MB} MB no total (${C.MAX_MB} MB por arquivo)</small><input type="file" id="up" multiple accept="application/pdf,image/jpeg,image/png,image/heic,image/heif,.pdf,.jpg,.jpeg,.png,.heic"></label>
+  ${FILES.length?`<p class="help" style="margin:0">📦 ${FILES.length} arquivo(s) · ${fmtMB(totalBytes())} de ${C.MAX_TOTAL_MB} MB</p>`:''}
+  <ul class="files" id="files">${FILES.map((f,i)=>`<li><span>📄 ${esc(f.name)}</span><small>${fmtMB(f.size)}</small><button type="button" data-rm="${i}" aria-label="Remover">✕</button></li>`).join('')}</ul>`
+  :`<p class="note">📲 Depois de enviar o cadastro, mande o PDF para a ${esc(C.NOME_CONTATO)} pelo WhatsApp.</p>`}`,
+  ok:()=>A.material==='Anexar aqui agora'&&!FILES.length?'Escolha os arquivos ou marque "Mandar pelo WhatsApp depois".':true},
+];
+
+function applyStyle(){document.documentElement.dataset.style=A.estilo;document.documentElement.style.setProperty('--kid',A.cor);
+  const m=document.querySelector('meta[name=theme-color]');if(m)m.content=A.cor}
+function tint(){
+  applyStyle(); const em=emoji(); const st=STYLES.find(s=>s.id===A.estilo)||STYLES[0];
+  document.getElementById('logo').textContent=em; document.getElementById('pvEm').textContent=em;
+  document.getElementById('pvTitle').textContent=A.apelido.trim()?`Olá, ${A.apelido.trim()}! ${em}`:'Olá, exploradora!';
+  const bits=[A.serie,temaNome(),A.minutos&&A.minutos+' por dia'].filter(Boolean);
+  document.getElementById('pvSub').textContent=bits.length?bits.join(' · '):'O app vai ficar com a cara dela conforme você responde.';
+  document.getElementById('pvMeta').textContent=`Estilo ${st.nome} · ${st.prog}`;
+}
+function render(){
+  const total=STEPS.length+1;
+  document.getElementById('steplbl').textContent=step<STEPS.length?`Passo ${step+1} de ${STEPS.length}`:'Revisão';
+  document.getElementById('bar').style.width=Math.round((step+1)/total*100)+'%';
+  if(step>=STEPS.length)return review();
+  const S=STEPS[step];
+  card.innerHTML=`<h2>${S.t}</h2><p class="help">${S.h}</p>${S.b()}<p class="err" id="err" hidden></p>
+   <div class="nav">${step?'<button type="button" class="btn back" id="back">← Voltar</button>':''}<button type="submit" class="btn go">${step===STEPS.length-1?'Revisar respostas':'Continuar →'}</button></div>`;
+  wire(); tint();
+}
+function err(msg){const e=document.getElementById('err');if(e){e.textContent=msg;e.hidden=false}}
+function wire(){
+  card.querySelectorAll('input[type=checkbox]').forEach(el=>el.addEventListener('change',()=>{A[el.id]=el.checked;save();blip()}));
+  card.querySelectorAll('input[type=text],input[type=email],select,textarea').forEach(el=>{if(el.id==='site')return;el.addEventListener('input',()=>{A[el.id]=el.value;save();tint()})});
+  card.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{const k=b.dataset.k,v=b.dataset.v;blip();
+    if(b.dataset.m==='1'){const max=+b.dataset.max;const i=A[k].indexOf(v);if(i>=0)A[k].splice(i,1);else{if(max&&A[k].length>=max)A[k].shift();A[k].push(v)}}else{A[k]=v}
+    save();render();if(k==='tema'&&v==='Outro'){const o=document.getElementById('temaOutro');o&&o.focus()}});
+  card.querySelectorAll('.sw').forEach(b=>b.onclick=()=>{A.cor=b.dataset.c;A.corNome=b.dataset.n;save();blip();render()});
+  card.querySelectorAll('.stc').forEach(b=>b.onclick=()=>{A.estilo=b.dataset.st;save();blip('ok');render()});
+  const up=document.getElementById('up');
+  if(up)up.onchange=()=>{const add=[...up.files];let msg='';
+    add.forEach(f=>{if(f.size>C.MAX_MB*1048576){msg=`"${f.name}" passa de ${C.MAX_MB} MB.`;return}if(FILES.length>=C.MAX_ARQUIVOS){msg=`Máximo de ${C.MAX_ARQUIVOS} arquivos.`;return}
+      if(totalBytes()+f.size>C.MAX_TOTAL_MB*1048576){msg=`Passou de ${C.MAX_TOTAL_MB} MB no total. Tire alguns arquivos ou mande o resto pelo WhatsApp.`;return}
+      if(!FILES.some(x=>x.name===f.name&&x.size===f.size))FILES.push(f)});
+    blip();render();if(msg)err(msg)};
+  card.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{FILES.splice(+b.dataset.rm,1);blip('back');render()});
+  const bk=document.getElementById('back');if(bk)bk.onclick=()=>{blip('back');step--;render();scrollTo(0,0)};
+}
+card.addEventListener('submit',e=>{e.preventDefault();if(step>=STEPS.length)return;
+  const r=STEPS[step].ok();if(r!==true){err(typeof r==='string'?r:'Responda para continuar.');return}
+  blip('ok');step++;render();scrollTo(0,0)});
+
+function summaryText(){
+  return ['🌟 Cadastro Quest Kids',`Responsável: ${A.resp}`,`Criança: ${A.apelido} · ${A.idade} anos · ${A.serie}`,`Estilo da tela: ${(STYLES.find(s=>s.id===A.estilo)||{}).nome}`,`Tema: ${temaNome()} · cor ${A.corNome}`,
+    `Reforço: ${A.materias.join(', ')}`,`Leituras: ${A.temas.concat(A.temaLivre?[A.temaLivre]:[]).join(', ')}`,`Tempo: ${A.minutos} · ${A.dias.join(', ')}`,
+    A.perfil.length?`Perfil: ${A.perfil.join('; ')}`:'',A.dificuldade?`Observações: ${A.dificuldade}`:'',`E-mail: ${A.email} · relatórios: ${A.freq.join(', ')}`,
+    `Material: ${A.material==='Anexar aqui agora'?FILES.length+' arquivo(s) anexado(s)':'vai mandar pelo WhatsApp'}`].filter(Boolean).join('\n');
+}
+function review(){
+  const st=STYLES.find(s=>s.id===A.estilo)||STYLES[0];
+  const rows=[['Responsável',A.resp],['Criança',`${A.apelido}, ${A.idade} anos, ${A.serie}`],['Estilo',st.nome],['Tema e cor',`${temaNome()} · ${A.corNome}`],['Reforço',A.materias.join(', ')],
+    ['Leituras',A.temas.concat(A.temaLivre?[A.temaLivre]:[]).join(', ')],['Tempo',`${A.minutos} · ${A.dias.join(', ')}`],['Perfil',A.perfil.join('; ')||'—'],['Observações',A.dificuldade||'—'],
+    ['Relatórios',`${A.email} · ${A.freq.join(', ')}`],['Material',A.material==='Anexar aqui agora'?`${FILES.length} arquivo(s)`:'Pelo WhatsApp depois']];
+  card.innerHTML=`<h2>Tudo certo? ✅</h2><p class="help">Confira as respostas e toque em enviar.</p>
+   <dl class="sum">${rows.map(([k,v])=>`<dt>${k}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+   <div class="nav"><button type="button" class="btn back" id="back">← Voltar</button><button type="button" class="btn go" id="send">Enviar cadastro 🚀</button></div><p class="status" id="st" aria-live="polite"></p>`;
+  document.getElementById('back').onclick=()=>{blip('back');step--;render()};
+  document.getElementById('send').onclick=send; tint();
+}
+
+/* ---- envio: Supabase (tabela + arquivos privados) e EmailJS ---- */
+const uuid=()=>(crypto.randomUUID?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return(c==='x'?r:(r&3|8)).toString(16)}));
+const H=()=>({apikey:C.SUPABASE_ANON_KEY,Authorization:'Bearer '+C.SUPABASE_ANON_KEY});
+const safeName=n=>n.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z0-9._-]+/g,'_').slice(-80);
+async function uploadAll(pasta,st){
+  const paths=[];
+  const tot=totalBytes();let doneB=0;
+  for(let i=0;i<FILES.length;i++){const f=FILES[i];st.textContent=`Enviando arquivo ${i+1} de ${FILES.length}… (${Math.round(doneB/tot*100)}%) · não feche esta tela`;
+    const path=`${pasta}/${String(i+1).padStart(2,'0')}-${safeName(f.name)}`;
+    const r=await fetch(`${C.SUPABASE_URL}/storage/v1/object/materiais/${path}`,{method:'POST',headers:Object.assign(H(),{'Content-Type':f.type||'application/octet-stream','x-upsert':'false'}),body:f});
+    if(!r.ok)throw new Error('Não consegui enviar o arquivo "'+f.name+'" ('+r.status+').');
+    doneB+=f.size;paths.push(path)}
+  return paths;
+}
+async function insertRow(pasta,arquivos){
+  const st=STYLES.find(s=>s.id===A.estilo)||STYLES[0];
+  const row={pasta,responsavel:A.resp.trim(),email:A.email.trim().toLowerCase(),freq:A.freq,apelido:A.apelido.trim(),idade:+A.idade||null,serie:A.serie,
+    estilo:st.id,tema:temaNome(),cor:A.cor,materias:A.materias,leituras:A.temas.concat(A.temaLivre.trim()?[A.temaLivre.trim()]:[]),minutos:A.minutos,dias:A.dias,
+    perfil:A.perfil,observacoes:A.dificuldade.trim(),material:A.material,arquivos,consentimento:true,som:A.som};
+  const r=await fetch(`${C.SUPABASE_URL}/rest/v1/cadastros`,{method:'POST',headers:Object.assign(H(),{'Content-Type':'application/json',Prefer:'return=minimal'}),body:JSON.stringify(row)});
+  if(!r.ok){let t='';try{t=(await r.json()).message||''}catch(e){}throw new Error('Não consegui salvar o cadastro ('+r.status+') '+t)}
+}
+async function emails(n){
+  if(!C.EMAILJS_PUBLIC_KEY||!C.EMAILJS_SERVICE_ID)return;
+  const params={responsavel:A.resp.trim(),email:A.email.trim(),apelido:A.apelido.trim(),resumo:summaryText(),arquivos:String(n),contato:C.NOME_CONTATO};
+  const go=t=>t?fetch('https://api.emailjs.com/api/v1.0/email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service_id:C.EMAILJS_SERVICE_ID,template_id:t,user_id:C.EMAILJS_PUBLIC_KEY,template_params:params})}).catch(()=>{}):null;
+  await Promise.all([go(C.EMAILJS_TEMPLATE_AVISO),go(C.EMAILJS_TEMPLATE_CONFIRMA)]);
+}
+async function send(){
+  if(sending)return; sending=true;
+  const btn=document.getElementById('send'),st=document.getElementById('st'),bk=document.getElementById('back');btn.disabled=true;if(bk)bk.disabled=true;st.className='status';st.textContent='Enviando…';
+  const hp=A.__hp; if(hp){done(true);return}   // robô de spam: finge que deu certo
+  if(!LIVE){done(false);return}
+  try{
+    const pasta=uuid();
+    const arquivos=A.material==='Anexar aqui agora'?await uploadAll(pasta,st):[];
+    st.textContent='Salvando o cadastro…';
+    await insertRow(pasta,arquivos);
+    await emails(arquivos.length);
+    try{localStorage.removeItem('qk-draft')}catch(e){}
+    done(true);
+  }catch(e){sending=false;btn.disabled=false;if(bk)bk.disabled=false;st.className='status';st.innerHTML=`<span style="color:var(--bad);font-weight:800">⚠️ ${esc(e.message)}</span><br>Confira a internet e toque em enviar de novo.`}
+}
+function done(saved){
+  blip('done');
+  document.getElementById('steplbl').textContent='Pronto!';document.getElementById('bar').style.width='100%';
+  card.classList.add('done');
+  const zap=A.material!=='Anexar aqui agora';
+  card.innerHTML=`<div class="big">${emoji()}</div><h2>Obrigada, ${esc(A.resp)}!</h2>
+   <p class="help">${saved?`Recebemos o cadastro da ${esc(A.apelido)}${FILES.length&&!zap?' e os '+FILES.length+' arquivo(s)':''}. ${A.email&&C.EMAILJS_TEMPLATE_CONFIRMA?'Você vai receber uma confirmação por e-mail. ':''}`:''}${zap||!saved?`Agora é só mandar as páginas escaneadas para a ${esc(C.NOME_CONTATO)} pelo WhatsApp. `:''}Em poucos dias o app da ${esc(A.apelido)} fica pronto!</p>
+   <p class="status ${saved?'ok':''}">${saved?'✓ Cadastro enviado':'Modo de teste: toque abaixo para copiar as respostas e colar no WhatsApp.'}</p>
+   ${saved?'':`<button type="button" class="btn go" id="copy" style="flex:none;width:100%">📋 Copiar respostas para o WhatsApp</button><textarea id="sumtxt" readonly style="font-size:13px">${esc(summaryText())}</textarea>`}`;
+  const cp=document.getElementById('copy');
+  if(cp)cp.onclick=async()=>{const t=document.getElementById('sumtxt');blip();try{await navigator.clipboard.writeText(t.value);cp.textContent='✓ Copiado! Cole no WhatsApp'}catch(e){t.focus();t.select();cp.textContent='Texto selecionado: copie e cole no WhatsApp'}};
+}
+document.addEventListener('input',e=>{if(e.target&&e.target.id==='site')A.__hp=e.target.value});
+paintSnd(); render();
+})();
+</script>
+</body>
+</html>
