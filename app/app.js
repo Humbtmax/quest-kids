@@ -17,6 +17,11 @@
     r.dataset.tema = tema || (matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro');
   }
   A.theme = theme;
+  // tema da área dos pais e das telas de entrada (fica salvo neste aparelho)
+  const adultTema = () => { try { return localStorage.getItem('qk.temaPais') || ''; } catch (e) { return ''; } };
+  A.adultTema = adultTema;
+  A.setAdultTema = tm => { try { localStorage.setItem('qk.temaPais', tm); } catch (e) {} theme('simples', tm); };
+  A.temaAtual = () => document.documentElement.dataset.tema;
   A.I = I;
 
   /* matéria de cada habilidade (chip da lição) */
@@ -40,7 +45,7 @@
 
   /* ================= entrada (login) ================= */
   function authScreen(mode, msg) {
-    theme('simples', 'claro'); mode = mode || 'entrar';
+    theme('simples', adultTema() || 'claro'); mode = mode || 'entrar';
     const title = mode === 'criar' ? t('criarConta') : mode === 'recuperar' ? t('esqueci') : mode === 'nova' ? t('novaSenha') : t('entrar');
     view(`<main class="min-h-screen flex items-center justify-center px-margin py-10">
       <div class="w-full max-w-md">
@@ -127,7 +132,7 @@
       picker();
     } catch (x) {
       if (x.message === 'sessao') return authScreen('entrar');
-      theme('simples');
+      theme('simples', adultTema());
       view(`<main class="min-h-screen flex items-center justify-center px-margin"><div class="w-full max-w-md bg-surface-container-lowest rounded-3xl p-6 soft-shadow text-center space-y-4">
         <div class="text-5xl">😕</div><p class="text-body-lg text-on-surface">${esc(traduz(x.message))}</p>${btnPrimary('r', t('continuar'))}<a href="#" id="o" class="block text-label-md text-primary underline">${t('sair')}</a></div></main>`);
       $('#r').onclick = boot; $('#o').onclick = async e => { e.preventDefault(); await Auth.signOut(); boot(); };
@@ -137,7 +142,7 @@
 
   /* ================= quem vai estudar ================= */
   function picker() {
-    theme('simples'); A.kid = null; A.eng = null;
+    theme('simples', adultTema()); A.kid = null; A.eng = null;
     const tl = A.trialLeft();
     view(`<main class="min-h-screen px-margin md:px-margin-tablet py-10 max-w-4xl mx-auto">
       <div class="flex items-center gap-3 mb-8">${logo}<span class="text-headline-md text-on-surface">Quest Kids</span></div>
@@ -275,6 +280,7 @@
         <div class="flex items-center gap-2">
           <span class="flex items-center gap-1 bg-secondary-container/20 px-2.5 py-1 rounded-full">${I('local_fire_department', 'text-secondary text-[18px]', 1)}<span class="text-label-sm text-on-secondary-container">${p.streak || 0}</span></span>
           <span class="flex items-center gap-1 bg-surface-container-high px-2.5 py-1 rounded-full">${I('monetization_on', 'text-secondary text-[18px]', 1)}<span class="text-label-sm text-on-surface">${p.points || 0}</span></span>
+          <button id="tm" title="${A.kid.tema === 'escuro' ? kt('claro') : kt('escuro')}" class="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface shadow-sm">${I(A.kid.tema === 'escuro' ? 'light_mode' : 'dark_mode', 'text-[20px]', 1)}</button>
           <button id="sw" title="${kt('trocar')}" class="w-9 h-9 rounded-full bg-primary-fixed/60 flex items-center justify-center text-[20px] shadow-sm">${esc(A.kid.avatar || '⭐')}</button>
         </div></div></header>`;
   }
@@ -288,6 +294,12 @@
   function wireNav() {
     app().querySelectorAll('[data-nav]').forEach(b => b.onclick = () => ({ hoje: kidHome, bib: library, prem: rewards, prog: progress })[b.dataset.nav]());
     const sw = $('#sw'); if (sw) sw.onclick = () => picker();
+    const tm = $('#tm'); if (tm) tm.onclick = () => {
+      const k = A.kid; k.tema = k.tema === 'escuro' ? 'claro' : 'escuro'; theme(k.estilo, k.tema);
+      const cur = (app().querySelector('[data-nav].text-primary') || {}).dataset; ({ hoje: kidHome, bib: library, prem: rewards, prog: progress })[(cur && cur.nav) || 'hoje']();
+      DB.upd('criancas', { eq: { id: k.id } }, { tema: k.tema }).catch(e => console.warn(e));
+      const kk = A.kids.find(x => x.id === k.id); if (kk) kk.tema = k.tema;
+    };
   }
   const pageMain = inner => `<main class="pt-20 pb-32 md:pb-36 px-margin md:px-margin-tablet max-w-5xl mx-auto">${inner}</main>`;
 

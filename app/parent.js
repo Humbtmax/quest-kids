@@ -21,7 +21,7 @@
   const btnS = (id, label, icon) => `<button id="${id}" class="w-full h-12 rounded-2xl bg-surface-container text-on-surface text-label-md flex items-center justify-center gap-2 hover:bg-surface-container-high">${icon ? I(icon, 'text-[20px]') : ''}<span>${label}</span></button>`;
 
   function shell(inner, bare) {
-    A().theme('simples');
+    A().theme('simples', A().adultTema());
     const tabs = [['resumo', 'dashboard', tx('Resumo', 'Summary')], ['corrigir', 'rate_review', tx('Corrigir', 'Review')], ['material', 'photo_camera', tx('Material', 'Material')], ['criancas', 'face', tx('Crianças', 'Kids')], ['conta', 'settings', tx('Conta', 'Account')]];
     view(`<header class="fixed top-0 inset-x-0 z-40 bg-surface/80 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
         <div class="h-16 px-margin md:px-margin-tablet max-w-6xl mx-auto flex items-center justify-between gap-2">
@@ -30,12 +30,14 @@
             <span class="flex items-center gap-1 bg-surface-container-high px-2.5 py-1 rounded-full">${I('lock', 'text-primary text-[16px]')}<span class="text-label-sm text-primary uppercase">${tx('Pais', 'Parents')}</span></span>
           </div>
           <nav class="hidden lg:flex items-center gap-1">${tabs.map(([k, i, l]) => `<button data-tab="${k}" class="flex items-center gap-1.5 px-3 py-2 rounded-full text-label-md ${tab === k ? 'bg-primary-container text-on-primary' : 'text-on-surface-variant hover:bg-surface-container'}">${I(i, 'text-[18px]', tab === k)}${l}</button>`).join('')}</nav>
-          <div class="w-9 h-9 rounded-full bg-primary flex items-center justify-center shrink-0">${I('person', 'text-on-primary text-[20px]')}</div>
+          <div class="flex items-center gap-2 shrink-0"><button id="ptm" title="${A().temaAtual() === 'escuro' ? tx('Modo claro', 'Light mode') : tx('Modo escuro', 'Dark mode')}" class="w-9 h-9 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center">${I(A().temaAtual() === 'escuro' ? 'light_mode' : 'dark_mode', 'text-[20px]', 1)}</button>
+          <div class="w-9 h-9 rounded-full bg-primary flex items-center justify-center">${I('person', 'text-on-primary text-[20px]')}</div></div>
         </div></header>
       <main class="pt-20 pb-32 lg:pb-12 px-margin md:px-margin-tablet max-w-6xl mx-auto">${inner}</main>
       ${bare ? '' : `<nav class="lg:hidden fixed bottom-0 inset-x-0 z-40 pb-safe md:bottom-4 md:px-4"><div class="bg-surface/90 backdrop-blur-xl shadow-[0_-4px_16px_rgba(20,163,163,0.06)] md:shadow-lg md:rounded-3xl md:max-w-xl md:mx-auto grid grid-cols-5 h-20 px-1">
         ${tabs.map(([k, i, l]) => `<button data-tab="${k}" class="flex flex-col items-center justify-center gap-1 ${tab === k ? 'text-primary' : 'text-on-surface-variant'}">${I(i, 'text-[24px]', tab === k)}<span class="text-label-sm">${l}</span></button>`).join('')}</div></nav>`}`);
     $('#back').onclick = () => A().picker();
+    $('#ptm').onclick = () => { A().setAdultTema(A().temaAtual() === 'escuro' ? 'claro' : 'escuro'); render(); };
     app().querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; render(); });
   }
   function kidSwitcher(kid) {
@@ -325,6 +327,7 @@
           ${btnS('inv', tx('Gerar convite', 'Create invite'), 'link')}
           <div class="flex gap-2"><input class="${inputCls} uppercase" id="cod" maxlength="8" placeholder="${tx('Recebeu um código?', 'Got a code?')}"><button id="acc" class="h-12 px-5 rounded-xl bg-primary-container text-on-primary text-label-lg">OK</button></div></section>
         <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('lock', 'text-primary')} ${tx('Senha dos pais', 'Parents password')}</h2><p class="text-body-sm text-on-surface-variant">${tx('4 números para entrar nesta área. As crianças não devem saber.', '4 digits to enter this area. Keep it from the kids.')}</p>${btnS('senha', tx('Mudar a senha dos pais', 'Change parents password'), 'password')}</section>
+        <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('contrast', 'text-primary')} ${tx('Aparência do painel', 'Panel appearance')}</h2>${seg([['claro', '☀️ ' + tx('Claro', 'Light')], ['escuro', '🌙 ' + tx('Escuro', 'Dark')]], A().temaAtual(), 'data-at')}<p class="text-body-sm text-on-surface-variant">${tx('O tema de cada criança se escolhe em Crianças → Editar, ou no botão ☀️/🌙 da tela dela.', "Each child's theme is set in Kids → Edit, or with the ☀️/🌙 button on their screen.")}</p></section>
         <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('language', 'text-primary')} ${tx('Idioma do painel', 'Panel language')}</h2>${seg([['pt', 'Português'], ['en', 'English']], QK.lang, 'data-l')}</section>
         <section class="${card} space-y-2"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('help', 'text-primary')} ${tx('Ajuda', 'Help')}</h2>
           <p class="text-body-sm text-on-surface-variant">${tx('Suporte', 'Support')}: <a class="text-primary underline" href="mailto:${C.SUPORTE_EMAIL}">${C.SUPORTE_EMAIL}</a></p>
@@ -333,6 +336,7 @@
           <p class="text-label-sm text-outline">${esc((Auth.user && Auth.user.email) || '')}</p>${btnS('out', t('sair'), 'logout')}</section>
       </div></div>`);
     app().querySelectorAll('[data-m]').forEach(b => b.onclick = () => { localStorage.setItem('qk.moeda', b.dataset.m); render(); });
+    app().querySelectorAll('[data-at]').forEach(b => b.onclick = () => { A().setAdultTema(b.dataset.at); render(); });
     app().querySelectorAll('[data-l]').forEach(b => b.onclick = () => { QK.setLang(b.dataset.l); render(); });
     app().querySelectorAll('[data-buy]').forEach(b => b.onclick = async () => {
       b.disabled = true; b.textContent = '⏳';

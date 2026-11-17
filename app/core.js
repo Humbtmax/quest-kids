@@ -48,7 +48,7 @@
       sequencia: 'Complete hoje para manter sua sequência!', nivel: 'Nível',
       minhasLeituras: 'Minhas leituras', minhasPalavras: 'Minhas palavras', lerDeNovo: 'Ler de novo',
       medalhas: 'Medalhas', certificados: 'Certificados da escola', semanaMin: 'Minutos nesta semana', habilidades: 'Habilidades',
-      sair: 'Sair', trocar: 'Trocar', planoVencido: 'O período de teste acabou. Peça para seus pais escolherem um plano 💛',
+      sair: 'Sair', trocar: 'Trocar', claro: 'Modo claro', escuro: 'Modo escuro', planoVencido: 'O período de teste acabou. Peça para seus pais escolherem um plano 💛',
       tempoAcabou: 'Tempo de hoje completo!', pausa: 'Pausado', fechar: 'Sair da lição?', fecharSim: 'Sim, sair', fecharNao: 'Continuar estudando',
       wordNew: 'Palavra nova', significado: 'O que significa', semPalavras: 'Suas palavras aparecem aqui quando você ler.',
       dica: '💡 Dica'
@@ -76,7 +76,7 @@
       sequencia: 'Finish today to keep your streak!', nivel: 'Level',
       minhasLeituras: 'My readings', minhasPalavras: 'My words', lerDeNovo: 'Read again',
       medalhas: 'Badges', certificados: 'School awards', semanaMin: 'Minutes this week', habilidades: 'Skills',
-      sair: 'Sign out', trocar: 'Switch', planoVencido: 'The free trial ended. Ask your parents to pick a plan 💛',
+      sair: 'Sign out', trocar: 'Switch', claro: 'Light mode', escuro: 'Dark mode', planoVencido: 'The free trial ended. Ask your parents to pick a plan 💛',
       tempoAcabou: "Today's time is complete!", pausa: 'Paused', fechar: 'Leave the lesson?', fecharSim: 'Yes, leave', fecharNao: 'Keep studying',
       wordNew: 'New word', significado: 'What does it mean', semPalavras: 'Your words show up here when you read.',
       dica: '💡 Hint'
