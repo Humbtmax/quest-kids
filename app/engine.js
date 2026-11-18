@@ -85,6 +85,32 @@
     if (q.answers) out.answers = q.answers.map(a => fill(a)).concat(q.answers.map(a => fill(a).replace(NUMLOC === 'en-US' ? /,/g : /\./g, '').replace(',', '.')));
     delete out.vars; return out;
   }
+  // confere a pergunta antes de mostrar: nada de {X} sobrando, opções vazias ou resposta faltando
+  const SOBRA = /\{=?[A-Za-z][^}]*\}/;
+  E.problema = function (q) {
+    if (!q) return 'vazia';
+    const txt = [q.prompt].concat(q.options || [], q.answers || [], q.items || []).map(x => typeof x === 'string' ? x : (x && x.t) || '');
+    if (!String(q.prompt || '').trim()) return 'sem_enunciado';
+    if (txt.some(t => SOBRA.test(t) || /\bNaN\b|undefined|Infinity/.test(t))) return 'sobrou_variavel';
+    if (q.type === 'mc') { if (!Array.isArray(q.options) || q.options.length < 2 || q.options.some(o => !String(o).trim())) return 'opcoes'; if (q.answer != null && !(q.answer >= 0 && q.answer < q.options.length)) return 'resposta'; }
+    if (q.type === 'num' && !(q.answers || []).filter(a => String(a).trim()).length) return 'resposta';
+    if ((q.type === 'order') && !(q.items || []).length) return 'itens';
+    if (q.type === 'sort' && (!(q.items || []).length || !(q.buckets || []).length)) return 'itens';
+    return null;
+  };
+  E.broken = function (q, motivo) { try { this.quebradas = this.quebradas || []; if (!this.quebradas.some(x => x.id === (q.base || q.id))) { this.quebradas.push({ id: q.base || q.id, motivo }); if (typeof this.onBroken === 'function') this.onBroken(q, motivo); } } catch (e) {} };
+  // perguntas desativadas (pelos pais ou pela gestão) ou reportadas pela criança
+  E.off = function (q) { const id = q.base || q.id; return !!(q.off || (this.Q[id] && this.Q[id].off) || ((this.prog.off || {})[id])); };
+  // modo de estudo escolhido pelos pais: 'estudo' (tudo), 'prova' (só o material da prova) ou 'ferias' (temas narrados)
+  E.provas = function () { const hoje = today(); return (this._todas || this.licoes).filter(l => l.modo_prova && (!l.data_prova || l.data_prova >= hoje)); };
+  E.aplicarModo = function (m) {
+    if (this._todas) { this.licoes = this._todas; this._todas = null; }
+    const pv = this.provas();
+    this.modo = m || (pv.length ? 'prova' : 'estudo');
+    if (this.modo === 'prova' && pv.length) { this._todas = this.licoes; this.licoes = pv; }
+    this.index();
+    return this.modo;
+  };
   E.variant = function (q) {
     const base = q.base ? this.Q[q.base] : q;
     if (base && base.vars) { const id = 'TV:' + base.id + ':' + (Date.now() % 1e8 + Math.floor(Math.random() * 1e4)); if (this.question(id)) return id; }
@@ -309,10 +335,17 @@
     const S = this.s; const tot = S.targets.leitura + S.targets.palavras + S.targets.reforco;
     for (let guard = 0; guard < 60; guard++) {
       if (S.queue.length) {
-        const it = S.queue.shift();
+        let it = S.queue.shift();
         // passou do limite: só termina o texto que já começou; perguntas extras ficam para outro dia
         if (S.units >= S.cap && (S.station !== 'leitura' || it.source === 'similar')) continue;
-        if (it.kind === 'q') { const q = this.question(it.qid); if (!q) continue; S.used.push(it.qid); S.units++; return Object.assign({ q, station: S.station }, it); }
+        if (it.kind === 'q') {
+          let q = this.question(it.qid); if (!q) continue;
+          // pergunta com números variáveis: SEMPRE sorteia (nunca mostra o molde com {X})
+          if (q.vars) { const v = this.variant(q); if (!v) { this.broken(q, 'sem_sorteio'); continue; } it = Object.assign({}, it, { qid: v }); q = this.question(v); }
+          const prob = this.problema(q); if (prob) { this.broken(q, prob); continue; }
+          if (this.off(q)) continue;
+          S.used.push(it.qid); S.units++; return Object.assign({ q, station: S.station }, it);
+        }
         S.units++; return Object.assign({ station: S.station }, it);
       }
       if (S.station === 'leitura') {

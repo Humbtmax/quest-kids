@@ -188,8 +188,9 @@
     const first = !!opts.first;
     const others = A().kids.slice();
     const d = { apelido: '', idade: null, mes_nasc: null, idioma_app: QK.lang === 'en' ? 'en' : 'pt-BR', avatar: AVATARES[others.length % AVATARES.length] || '🦄', foco: [], minutos: 15, dias: [1, 2, 3, 4, 5], pin: '' };
-    const steps = (first ? ['oi', 'parabens', 'saiba', 'termos'] : []).concat(['apelido', 'idade', 'mes', 'idioma', 'foco', 'meta', 'dias', 'constancia', 'pin', 'promessa'], first ? ['casa', 'planos'] : []);
-    const N = steps.length; let i = 0, saved = null, dir = 1;
+    const steps = (first ? ['oi', 'parabens', 'saiba', 'termos', 'pais'] : []).concat(['apelido', 'idade', 'mes', 'idioma', 'foco', 'meta', 'dias', 'constancia', 'pin', 'promessa'], first ? ['modos', 'casa', 'planos', 'upsell'] : []);
+    const N = steps.length; let i = Math.max(0, steps.indexOf(opts.jump || '')), saved = null, dir = 1;
+    if (opts.apelido) d.apelido = opts.apelido;
     const idx = n => steps.indexOf(n);
     const go = k => { dir = k < i ? -1 : 1; i = Math.max(0, Math.min(N - 1, k)); draw(); };
     // "saiba mais" só aparece se o pai pedir; voltar pula ele se não foi visto
@@ -226,6 +227,58 @@
         frame(Object.assign(common, { body: termsBody(), btn: tx('Aceitar e continuar', 'Accept and continue'), btnOff: !d.ok }));
         $('#ok1').checked = !!d.ok; $('#ok1').onchange = e => { d.ok = e.target.checked; $('#nx').disabled = !d.ok; };
         return ($('#nx').onclick = async () => { $('#nx').disabled = true; await aceitar(); next(); });
+      }
+      if (s === 'pais') {
+        d.pais = d.pais || A().pais();
+        frame(Object.assign(common, { btn: tx('Continuar', 'Continue'), body: `${bubble([tx('Onde a sua família mora?', 'Where does your family live?')])}
+          <div class="space-y-3">${[['BR', '🇧🇷', 'Brasil', tx('Preços em reais, Pix e currículo brasileiro (BNCC)', 'Prices in R$, Pix and the Brazilian curriculum')], ['US', '🇺🇸', tx('Estados Unidos', 'United States'), tx('Preços em dólar e currículo americano', 'Prices in US$ and the US curriculum')]].map(([v, f, n, s2]) => bigCard('data-v', v, d.pais === v, `<span class="text-[34px]">${f}</span><span><b class="text-headline-md text-on-surface block">${n}</b><span class="text-body-sm text-on-surface-variant">${s2}</span></span>`)).join('')}</div>
+          <p class="text-body-sm text-on-surface-variant mt-3 text-center">${tx('Dá para mudar depois em Área dos pais → Conta.', 'You can change it later in Parents → Account.')}</p>` }));
+        app().querySelectorAll('[data-v]').forEach(b => b.onclick = () => { d.pais = b.dataset.v; draw(); });
+        return ($('#nx').onclick = async () => {
+          $('#nx').disabled = true;
+          try { await DB.rpc('definir_pais', { p: d.pais }); } catch (e) { console.warn('pais', e.message); }
+          if (A().famRow) A().famRow.pais = d.pais;
+          d.idioma_app = d.pais === 'US' ? 'en' : 'pt-BR';
+          next();
+        });
+      }
+      if (s === 'modos') {
+        const tema = window.QKTemas ? QKTemas.CAT.slice(0, 8) : [];
+        const fone = alvo => `<div class="relative mx-auto w-[230px] rounded-[30px] border-[6px] border-on-surface bg-surface p-2.5 shadow-lg">
+            <div class="flex items-center justify-between mb-2"><span class="text-[10px] font-bold text-primary bg-primary/10 rounded-full px-2 py-0.5">🔒 ${tx('PAIS', 'PARENTS')}</span><span class="w-5 h-5 rounded-full bg-primary-container"></span></div>
+            <p class="text-[11px] font-extrabold text-on-surface mb-1.5">${tx('Modo de estudo', 'Study mode')} · 🦄</p>
+            <div class="grid grid-cols-3 gap-1">${[['estudo', '📘', tx('Estudo', 'Study')], ['prova', '📝', tx('Prova', 'Test')], ['ferias', '🏖️', tx('Férias', 'Holiday')]].map(([k, e, n]) => `<span class="rounded-lg py-1.5 text-center text-[10px] font-bold ${k === alvo ? 'bg-primary-container text-on-primary ring-2 ring-secondary-container' : 'bg-surface-container text-on-surface-variant'}">${e}<br>${n}</span>`).join('')}</div>
+            <div class="mt-2 space-y-1">${alvo === 'ferias' ? tema.slice(0, 3).map(t => `<div class="flex items-center gap-1.5 rounded-lg bg-surface-container-low px-1.5 py-1"><span class="text-[14px]">${t.icon}</span><span class="text-[9px] text-on-surface truncate">${esc(pt() ? t.pt : t.en)}</span></div>`).join('') : `<div class="rounded-lg bg-tertiary-container/30 px-1.5 py-1 text-[9px] text-on-surface">📝 ${tx('Prova de Ciências em 3 dias', 'Science test in 3 days')}</div><div class="rounded-lg bg-surface-container-low px-1.5 py-1 text-[9px] text-on-surface">${tx('Simulado: 7,8 → 9,0', 'Practice test: 7.8 → 9.0')}</div>`}</div>
+            <span class="qk-seta absolute text-[34px] ${alvo === 'ferias' ? '-right-9 top-[58px]' : '-left-9 top-[58px] scale-x-[-1]'}">👈</span></div>`;
+        frame(Object.assign(common, { btn: tx('Que legal!', 'Awesome!'), body: `${bubble([tx('Mais dois superpoderes do app! 🦸', 'Two more superpowers! 🦸'), tx('Na Área dos pais você escolhe o <b>modo de estudo</b> com 1 toque:', 'In the Parents area you pick the <b>study mode</b> with 1 tap:')])}
+          <div class="space-y-5">
+            <div class="bg-surface-container-lowest border-2 border-surface-container-high rounded-2xl p-4 space-y-3"><h3 class="text-headline-md text-on-surface">📝 ${tx('Modo prova', 'Test mode')}</h3>
+              <p class="text-body-md text-on-surface-variant">${tx('Tem prova na escola? Mande o material com a data. O app foca só naquela matéria até o dia, faz um simulado e mostra se está pronta.', 'A test coming up? Send the material with the date. The app focuses on that subject until the day, runs a practice test and shows if your child is ready.')}</p>${fone('prova')}</div>
+            <div class="bg-surface-container-lowest border-2 border-surface-container-high rounded-2xl p-4 space-y-3"><h3 class="text-headline-md text-on-surface">🏖️ ${tx('Modo férias', 'Holiday mode')}</h3>
+              <p class="text-body-md text-on-surface-variant">${tx('Histórias narradas com palavras novas e perguntas, para não perder o hábito nas férias. <b>2 temas vêm grátis</b>; o Pacote Férias traz 10 à sua escolha.', 'Narrated stories with new words and questions, to keep the habit over the holidays. <b>2 topics are free</b>; the Holiday Pack brings 10 of your choice.')}</p>${fone('ferias')}
+              <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1">${tema.map(t => `<div class="min-w-[110px] rounded-xl bg-surface-container-low p-2"><div class="text-[26px]">${t.icon}</div><p class="text-[11px] font-bold text-on-surface leading-tight">${esc(pt() ? t.pt : t.en)}</p><span class="text-[10px] ${t.pacote === 'gratis' ? 'text-primary font-bold' : 'text-on-surface-variant'}">${t.pacote === 'gratis' ? tx('Grátis', 'Free') : '🏖️ ' + tx('Pacote', 'Pack')}</span></div>`).join('')}</div></div>
+          </div>` }));
+        return ($('#nx').onclick = next);
+      }
+      if (s === 'upsell') {
+        frame(Object.assign(common, { back: null, body: '<div class="spin" style="margin-top:20vh"></div>' }));
+        DB.sel('produtos', { eq: { moeda: A().moeda() } }).catch(() => []).then(prods => {
+          const p = prods.find(x => x.tipo === 'temas'); const tema = window.QKTemas ? QKTemas.CAT.filter(t => t.pacote !== 'gratis').slice(0, 9) : [];
+          frame(Object.assign(common, { back: null, btn: p ? `🏖️ ${tx('Quero o Pacote Férias', 'Get the Holiday Pack')} · ${esc(p.valor_texto)}` : tx('Entrar no app', 'Go to the app'),
+            foot: p ? `<button id="depois" class="w-full h-11 text-label-md text-on-surface-variant">${tx('Agora não, entrar no app', 'Not now, go to the app')}</button>` : '',
+            body: `${bubble([tx(`Prontinho, ${nome()} já pode começar! 🎉`, `All set, ${nome()} can start! 🎉`), tx('Uma última dica: nas férias o hábito costuma se perder.', 'One last tip: habits often slip during holidays.'), tx('Com o <b>Pacote Férias</b>, você escolhe 10 temas narrados para manter o estudo divertido o ano todo.', 'With the <b>Holiday Pack</b> you pick 10 narrated topics to keep studying fun all year.')])}
+              <div class="grid grid-cols-3 gap-2">${tema.map(t => `<div class="rounded-xl bg-surface-container-lowest border-2 border-surface-container-high p-2 text-center"><div class="text-[28px]">${t.icon}</div><p class="text-[11px] font-bold text-on-surface leading-tight line-clamp-2">${esc(pt() ? t.pt : t.en)}</p></div>`).join('')}</div>
+              <ul class="mt-4 space-y-1.5 text-body-md text-on-surface">${[tx('10 temas à sua escolha, de uma lista com mais de 20', '10 topics of your choice from a list of 20+'), tx('Áudio narrado + palavras novas + perguntas', 'Narrated audio + new words + questions'), tx('Pagamento único, sem mensalidade extra', 'One-time payment, no extra monthly fee'), tx('Você também pode comprar depois em Material', 'You can also buy it later in Material')].map(x => `<li class="flex gap-2"><span class="text-primary">✓</span><span>${x}</span></li>`).join('')}</ul>` }));
+          const fim = () => { toast(tx('🎉 Bons estudos!', '🎉 Happy studying!'), 3000); A().picker(); };
+          const dp = $('#depois'); if (dp) dp.onclick = fim;
+          $('#nx').onclick = async () => {
+            if (!p) return fim();
+            $('#nx').disabled = true;
+            try { const r = await DB.fn('checkout', { codigo: p.codigo, volta: location.origin + location.pathname }); location.href = r.url; }
+            catch (x) { toast(/indispon|unavailable|demo/i.test(x.message) ? tx('Compras ainda não liberadas. Você pode comprar depois em Material. 💙', 'Purchases not open yet. You can buy it later in Material. 💙') : x.message, 4500); setTimeout(fim, 1800); }
+          };
+        });
+        return;
       }
       if (s === 'apelido') {
         frame(Object.assign(common, { inlineBtn: true, btn: tx('Continuar', 'Continue'), body: `${bubble(first ? tx('Como vamos chamar a criança no app?', 'What should we call your child in the app?') : tx('Que legal, mais uma criança! Como vamos chamar no app?', 'Great, one more kid! What should we call them?'))}
@@ -355,23 +408,33 @@
       }
       if (s === 'planos') {
         frame(Object.assign(common, { body: '<div class="spin" style="margin-top:20vh"></div>' }));
-        const moeda = localStorage.getItem('qk.moeda') || (pt() ? 'brl' : 'usd');
+        const moeda = A().moeda();
         Promise.all([DB.sel('precos', { eq: { moeda } }).catch(() => []), DB.rpc('vagas_fundador').catch(() => 0)]).then(([precos, vagas]) => {
           const fund = moeda === 'brl' && vagas > 0;
           const fim = new Date(Date.now() + 7 * 864e5).toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: 'numeric', month: 'long' });
-          frame(Object.assign(common, { btn: tx('Começar 7 dias grátis', 'Start 7 days free'),
-            foot: `<p class="text-center text-label-sm text-on-surface-variant">${tx('Cancele quando quiser · Sem cartão agora', 'Cancel anytime · No card now')}</p>`,
-            body: `<div class="text-center mb-4 [&>svg]:mx-auto">${mascot(88)}<h1 class="text-headline-xl-mobile text-on-surface mt-2">${tx('Experimente tudo grátis por 7 dias', 'Try everything free for 7 days')}</h1></div>
+          const direta = !!QK.C.COMPRA_DIRETA;
+          frame(Object.assign(common, { btn: direta ? tx('Assinar e começar', 'Subscribe and start') : tx('Começar 7 dias grátis', 'Start 7 days free'),
+            foot: `<p class="text-center text-label-sm text-on-surface-variant">${direta ? (A().pais() === 'BR' ? 'Cartão de crédito ou Pix · Cancele quando quiser' : tx('Cartão de crédito · Cancele quando quiser', 'Credit card · Cancel anytime')) : tx('Cancele quando quiser · Sem cartão agora', 'Cancel anytime · No card now')}</p>`,
+            body: `<div class="text-center mb-4 [&>svg]:mx-auto">${mascot(88)}<h1 class="text-headline-xl-mobile text-on-surface mt-2">${direta ? tx('Escolha o plano da sua família', "Choose your family's plan") : tx('Experimente tudo grátis por 7 dias', 'Try everything free for 7 days')}</h1></div>
               ${precos.length ? plansHtml(precos, moeda, fund, 'anual') : ''}
-              <div class="mt-4 bg-surface-container-low rounded-2xl p-4 space-y-2 text-body-sm text-on-surface-variant">
+              ${direta ? '' : `<div class="mt-4 bg-surface-container-low rounded-2xl p-4 space-y-2 text-body-sm text-on-surface-variant">
                 <p class="flex gap-2">${I('event_available', 'text-[18px] text-primary shrink-0')}<span>${tx(`<b class="text-on-surface">Hoje:</b> acesso completo, sem cartão e sem cobrança.`, `<b class="text-on-surface">Today:</b> full access, no card, no charge.`)}</span></p>
                 <p class="flex gap-2">${I('notifications', 'text-[18px] text-primary shrink-0')}<span>${tx(`<b class="text-on-surface">${fim}:</b> o teste acaba e o app pede para escolher um plano. Nada é cobrado sem você assinar.`, `<b class="text-on-surface">${fim}:</b> the trial ends and the app asks you to pick a plan. Nothing is charged unless you subscribe.`)}</span></p>
-                <p class="flex gap-2">${I('autorenew', 'text-[18px] text-primary shrink-0')}<span>${tx('Se assinar, o plano renova automaticamente até você cancelar, na Área dos pais → Conta.', 'If you subscribe, the plan renews automatically until you cancel in Parents → Account.')}</span></p></div>
+                <p class="flex gap-2">${I('autorenew', 'text-[18px] text-primary shrink-0')}<span>${tx('Se assinar, o plano renova automaticamente até você cancelar, na Área dos pais → Conta.', 'If you subscribe, the plan renews automatically until you cancel in Parents → Account.')}</span></p></div>`}
               <div class="mt-3 bg-surface-container-low rounded-2xl p-3 flex items-center gap-3"><span class="text-[26px]">🏖️</span><p class="text-body-sm text-on-surface"><b>${tx('Modo férias:', 'Holiday mode:')}</b> ${tx('2 temas narrados grátis para experimentar. Pacote Férias opcional, com 10 temas à sua escolha.', '2 free narrated topics to try. Optional Holiday Pack with 10 topics of your choice.')}</p></div>
               ${depoHtml()}
               ${fund ? `<p class="mt-3 text-center text-label-md text-secondary">🎁 ${tx(`Preço de fundador: restam ${vagas} vagas.`, `Founder price: ${vagas} spots left.`)}</p>` : ''}` }));
           app().querySelectorAll('input[name=plano]').forEach(r => r.onchange = () => { try { localStorage.setItem('qk.planoEscolhido', r.value); } catch (e) {} });
-          $('#nx').onclick = () => { toast(tx('🎉 Bons estudos! Você escolhe o plano quando quiser.', '🎉 Happy studying! Pick a plan whenever you like.'), 3500); A().picker(); };
+          $('#nx').onclick = async () => {
+            if (QK.C.COMPRA_DIRETA) {
+              const sel = planSel(); if (!sel) return toast(tx('Escolha um plano.', 'Pick a plan.'));
+              $('#nx').disabled = true;
+              try { const r = await DB.fn('checkout', { codigo: sel.codigo, volta: location.origin + location.pathname + '?upsell=1' }); location.href = r.url; }
+              catch (x) { $('#nx').disabled = false; toast(x.message, 4500); }
+              return;
+            }
+            next();
+          };
         });
         return;
       }

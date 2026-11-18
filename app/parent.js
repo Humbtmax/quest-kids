@@ -49,7 +49,16 @@
   }
   const wireKidSwitch = () => app().querySelectorAll('[data-kid]').forEach(b => b.onclick = () => { kidSel = b.dataset.kid; render(); });
 
-  async function open() { tab = 'resumo'; await A().loadFamily().catch(() => {}); kidSel = kidSel && A().kids.find(k => k.id === kidSel) ? kidSel : (A().kids[0] || {}).id; render(); }
+  async function open() {
+    tab = 'resumo'; await A().loadFamily().catch(() => {}); kidSel = kidSel && A().kids.find(k => k.id === kidSel) ? kidSel : (A().kids[0] || {}).id;
+    // resultado de simulado novo: abre direto na criança que fez (o resultado aparece primeiro)
+    try {
+      const ss = await DB.sel('tentativas', { inn: { crianca_id: A().kids.map(k => k.id) }, eq: { tipo: 'simulado' }, order: 'iniciada_em.desc', limit: 10 });
+      const novo = ss.find(t => t.iniciada_em > (localStorage.getItem('qk.simvisto.' + t.crianca_id) || ''));
+      if (novo) kidSel = novo.crianca_id;
+    } catch (e) {}
+    render();
+  }
   function render() {
     shell('<div class="spin" style="margin-top:20vh"></div>');
     ({ resumo, corrigir, material, criancas, conta, gestao })[tab]().catch(x => shell(`<div class="${card}"><p class="text-body-md">😕 ${esc(x.message)}</p></div>`));
@@ -74,6 +83,7 @@
     const N = periodo, fim = today(), ini = addDays(fim, -(N - 1)), pfim = addDays(ini, -1), pini = addDays(pfim, -(N - 1));
     const [pr, ts, lics, simR] = await Promise.all([DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'main' } }), DB.sel('tentativas', { eq: { crianca_id: kid.id }, gte: { iniciada_em: addDays(today(), -Math.max(2 * N, 60)) }, order: 'iniciada_em.desc', limit: 500 }), DB.sel('licoes', { eq: { crianca_id: kid.id }, order: 'criado_em.desc', limit: 60 }).catch(() => []), DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'sim' } }).catch(() => [])]);
     const fbs = await DB.sel('feedback_prova', { eq: { crianca_id: kid.id } }).catch(() => null);
+    const modos = await DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'modo' } }).catch(() => []);
     const provaPassou = fbs === null ? null : lics.find(l => l.conteudo && l.conteudo.modo_prova && l.conteudo.data_prova && l.conteudo.data_prova < today() && l.conteudo.data_prova >= addDays(today(), -30) && !fbs.some(f => f.licao_id === l.id));
     const p = (pr[0] && pr[0].dados) || {}; const dias = p.dias || {}; const goal = kid.minutos || 15, steps = Math.min(40, Math.round(goal * 0.6 + 4));
     const plan = []; for (let d = ini; d <= fim; d = addDays(d, 1)) if ((kid.dias || [1, 2, 3, 4, 5]).includes(new Date(d + 'T12:00').getDay())) plan.push(d);
@@ -114,6 +124,7 @@
       <section class="${card} space-y-3">
         <div class="flex items-center justify-between"><div><p class="text-label-sm text-outline flex items-center gap-1 uppercase tracking-wide">${I('verified_user', 'text-[14px] text-primary')} ${tx('Área dos pais', 'Parents area')}</p><h1 class="text-headline-lg-mobile md:text-headline-lg text-on-surface mt-0.5">${tx('Olá, família', 'Hi, family')} 👋</h1></div></div>
         ${kidSwitcher(kid)}</section>
+      ${provaCard(lics.map(l => Object.assign({ crianca_id: kid.id }, l)), modos)}
       ${tl !== null ? `<button id="toplan" class="w-full text-left bg-secondary-fixed text-on-secondary-fixed rounded-2xl p-3.5 flex items-center gap-3">${I('hourglass_top', 'text-[22px]')}<span class="text-label-md flex-1">${tx(`Teste grátis: faltam ${tl} dias.`, `Free trial: ${tl} days left.`)}</span><span class="text-label-md underline">${tx('Ver planos', 'See plans')}</span></button>` : ''}
       ${pend ? `<button data-go="corrigir" class="w-full text-left bg-secondary-fixed/60 text-on-secondary-fixed rounded-2xl p-3.5 flex items-center gap-3">${I('rate_review', 'text-[22px]')}<span class="text-label-md">${pend} ${pend === 1 ? tx('item esperando sua correção', 'item waiting for your review') : tx('itens esperando sua correção', 'items waiting for your review')}</span></button>` : ''}
       ${provaPassou ? `<section class="${card} space-y-3 ring-2 ring-secondary-container"><h2 class="text-headline-md text-on-surface">🎓 ${tx(`Como foi a prova de ${esc(provaPassou.titulo || '')}?`, `How did the ${esc(provaPassou.titulo || '')} test go?`)}</h2>
@@ -152,6 +163,8 @@
           ${simR[0] && simR[0].dados && !simR[0].dados.feito ? `<p class="text-body-sm text-on-surface">⏳ ${tx('Já tem um simulado esperando a criança fazer', 'A practice test is waiting for your child')} (${simR[0].dados.n} ${tx('perguntas', 'questions')}).</p>` : ''}
           <button id="simsave" class="btn3d w-full h-12 rounded-xl bg-primary-container text-on-primary text-label-lg">📝 ${tx('Deixar o simulado para a criança fazer', 'Leave the practice test for your child')}</button>
           <p class="text-body-sm text-on-surface-variant">${tx('Aparece na tela Hoje dela. Como numa prova, ela só vê a nota no final.', 'It shows on her Today screen. Like a real test, she only sees the grade at the end.')}</p></div>
+        ${sims.length ? (() => { const g = {}; sims.slice().reverse().forEach(t => { const sm = t.leitura.simulado, k = (sm.materias && sm.materias.length === 1 ? sm.materias[0] : sm.materias && sm.materias.length ? tx('Várias matérias', 'Several subjects') : tx('Todas as matérias', 'All subjects')); (g[k] = g[k] || []).push(sm.nota); });
+          return `<div class="bg-surface-container-low rounded-2xl p-3 space-y-1.5"><b class="text-label-lg text-on-surface">📚 ${tx('Notas dos simulados por matéria', 'Practice test grades by subject')}</b>${Object.entries(g).map(([m, ns]) => `<div class="flex items-center justify-between gap-2 text-body-md"><span class="text-on-surface truncate">${esc(m)}</span><b class="text-on-surface whitespace-nowrap">${ns.map(fmtN1).join(' → ')}${ns.length > 1 ? (ns[ns.length - 1] > ns[0] ? ' 📈' : ns[ns.length - 1] < ns[0] ? ' 📉' : '') : ''}</b></div>`).join('')}</div>`; })() : ''}
         ${sims.length ? `<div><b class="text-label-lg text-on-surface">${tx('Simulados feitos', 'Practice tests taken')}</b><div class="divide-y divide-surface-container-high mt-1">${sims.map((t, i) => { const sm = t.leitura.simulado, prev = sims[i + 1]; return `<button data-sim="${i}" class="w-full text-left py-2.5 flex items-center gap-3"><span class="flex-1 text-body-md text-on-surface">${fmtD(String(t.iniciada_em).slice(0, 10))} · ${t.total} ${tx('perguntas', 'questions')} · ⏱️ ${Math.max(1, Math.round((t.duracao_seg || 0) / 60))} min</span><b class="text-label-lg ${sm.nota >= 7 ? 'text-primary' : 'text-secondary'}">${fmtN1(sm.nota)}</b>${prev ? arrow(sm.nota, prev.leitura.simulado.nota) : ''}</button>`; }).join('')}</div></div>` : ''}
       </section>
       <button id="mais" class="w-full h-12 rounded-2xl bg-surface-container text-on-surface text-label-lg">${maisGraf ? tx('Esconder gráficos extras ▲', 'Hide extra charts ▲') : tx('📈 Ver mais gráficos', '📈 See more charts')}</button>
@@ -186,15 +199,18 @@
       const cfg = { n: +$('#sn').value, tempo: +$('#st').value || 0, licoes: $('#sl').value ? [$('#sl').value] : null, criado: new Date().toISOString(), feito: false };
       try { await DB.ins('progresso', { crianca_id: kid.id, chave: 'sim', dados: cfg, atualizado_em: new Date().toISOString() }, { upsert: true, onConflict: 'crianca_id,chave' }); toast('✅ ' + tx('Pronto! O simulado aparece na tela da criança.', "Done! The test shows on your child's screen."), 4000); render(); } catch (x) { toast(x.message); }
     };
-    app().querySelectorAll('[data-sim]').forEach(b => b.onclick = () => {
-      const t2 = sims[+b.dataset.sim], wrong = (t2.itens || []).filter(i => i.correct === false);
+    const visto = (() => { try { return localStorage.getItem('qk.simvisto.' + kid.id) || ''; } catch (e) { return ''; } })();
+    if (sims[0] && sims[0].iniciada_em > visto) { try { localStorage.setItem('qk.simvisto.' + kid.id, sims[0].iniciada_em); } catch (e) {} setTimeout(() => simModal(sims[0], true), 300); }
+    app().querySelectorAll('[data-sim]').forEach(b => b.onclick = () => simModal(sims[+b.dataset.sim]));
+    function simModal(t2, novo) {
+      const wrong = (t2.itens || []).filter(i => i.correct === false);
       const ov = document.createElement('div'); ov.className = 'fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center';
-      ov.innerHTML = `<div class="bg-surface w-full sm:max-w-lg max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 space-y-3"><div class="flex justify-between items-center"><h3 class="text-headline-md text-on-surface">📝 ${tx('Simulado', 'Practice test')} · ${fmtN1(t2.leitura.simulado.nota)}</h3><button data-x class="w-10 h-10 rounded-full bg-surface-container">✕</button></div>
+      ov.innerHTML = `<div class="bg-surface w-full sm:max-w-lg max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 space-y-3"><div class="flex justify-between items-center"><h3 class="text-headline-md text-on-surface">${novo ? '🎉 ' + tx(`Chegou o resultado do simulado de ${esc(kid.apelido)}!`, `${esc(kid.apelido)}'s practice test result is in!`) + '<br>' : ''}📝 ${tx('Simulado', 'Practice test')} · ${fmtN1(t2.leitura.simulado.nota)}${(t2.leitura.simulado.materias || []).length ? ' · ' + esc(t2.leitura.simulado.materias.join(', ').slice(0, 60)) : ''}</h3><button data-x class="w-10 h-10 rounded-full bg-surface-container">✕</button></div>
         <p class="text-body-md text-on-surface">${t2.acertos}/${t2.total} ${tx('certas', 'right')} · ⏱️ ${Math.max(1, Math.round((t2.duracao_seg || 0) / 60))} min${t2.leitura.simulado.tempo ? ' / ' + t2.leitura.simulado.tempo + ' min' : ''} · ${tx('média', 'avg')} ${Math.round((t2.duracao_seg || 0) / Math.max(1, t2.total))}s ${tx('por pergunta', 'per question')}</p>
         ${wrong.length ? `<b class="text-label-lg text-on-surface">${tx('Errou', 'Missed')}</b>${wrong.map(i => `<div class="bg-surface-container-low rounded-xl p-3 text-body-sm"><span class="text-on-surface-variant">${tx('Resposta dela', 'Her answer')}:</span> <b class="text-error">${esc(i.answer)}</b><br><span class="text-on-surface-variant">${esc(A().skillInfo(i.skill || '').name)}</span></div>`).join('')}` : `<p class="text-body-md text-primary">${tx('Acertou tudo! 🎉', 'All right! 🎉')}</p>`}
         <p class="text-body-sm text-on-surface-variant">ℹ️ ${DISC()}</p></div>`;
       document.body.appendChild(ov); ov.onclick = e => { if (e.target === ov || e.target.closest('[data-x]')) ov.remove(); };
-    });
+    }
   }
   const fmtD = d => new Date(d + 'T12:00').toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' });
   // relatório em PDF simples (abre a versão para imprimir / salvar em PDF)
@@ -262,7 +278,7 @@
       const pl = box.querySelector('[data-player]'); b.disabled = true;
       try {
         const url = await DB.signed(r.bucket, r.path, 600);
-        if (!url) throw new Error(tx('Esta gravação não ficou guardada (no modo teste só cabem gravações curtas).', 'This recording was not kept (demo mode only keeps short ones).'));
+        if (!url) throw new Error(tx('Esta gravação não ficou guardada (no modo demonstração só cabem gravações curtas).', 'This recording was not kept (demo mode only keeps short ones).'));
         // baixa o arquivo e toca com o tipo certo (o iPhone grava em mp4/aac; o Chrome em webm)
         const isMp4 = /mp4|m4a|aac/.test(r.mime || r.path), type = isMp4 ? 'audio/mp4' : 'audio/webm';
         let src = url;
@@ -303,6 +319,44 @@
         <span class="text-[11px] text-on-surface-variant">${(t.faixas || []).map(f => f + ' ' + tx('anos', 'yrs')).join(' · ')}${(t.idiomas || []).length ? ' · ' + t.idiomas.map(l => l === 'en' ? '🇺🇸' : '🇧🇷').join('') : ''}</span>
         ${pode(t) ? A().kids.map(k => `<button data-tat="${k.id}|${esc(t.id)}" class="mt-auto h-9 rounded-lg text-label-sm ${ativo(k, t) ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface'}">${ativo(k, t) ? '✓ ' : '+ '}${esc(k.avatar)} ${esc(k.apelido)}</button>`).join('') : ''}</div>`).join('')}</div>
       <p class="text-body-sm text-on-surface-variant">${tx('Toque no nome da criança para ativar ou desativar o tema na Biblioteca dela. Cada tema terá duas versões de áudio: 6–9 e 10–14 anos.', "Tap a child's name to turn the topic on or off in their Library. Each topic will have two audio versions: ages 6–9 and 10–14.")}${temPack ? ' ' + tx(`Pacote Férias: ${escolhidos.size} de ${QKTemas.PACK_MAX} temas escolhidos.`, `Holiday Pack: ${escolhidos.size} of ${QKTemas.PACK_MAX} topics chosen.`) : ''}</p></section>`;
+  }
+
+  /* ================= modo de estudo (por criança): estudo · prova · férias ================= */
+  const provasDe = (lics, kidId) => (lics || []).filter(l => l.crianca_id === kidId && !l.pausada && l.conteudo && l.conteudo.modo_prova && (!l.conteudo.data_prova || l.conteudo.data_prova >= today()));
+  const modoDe = (modos, lics, kidId) => { const r = (modos || []).find(x => x.crianca_id === kidId); return (r && r.dados && r.dados.modo) || (provasDe(lics, kidId).length ? 'prova' : 'estudo'); };
+  const diasAte = d => Math.round((new Date(d + 'T12:00') - new Date(today() + 'T12:00')) / 864e5);
+  function provaCard(lics, modos) {
+    return A().kids.map(k => {
+      const pv = provasDe(lics, k.id); if (!pv.length || modoDe(modos, lics, k.id) !== 'prova') return '';
+      return `<section class="mb-5 rounded-2xl p-4 border-2 border-tertiary-container bg-tertiary-container/15 space-y-2">
+        <div class="flex items-center gap-2 flex-wrap"><span class="text-[26px]">📝</span><b class="text-headline-md text-on-surface flex-1">${tx('Modo prova ligado', 'Test mode on')} · ${esc(k.avatar)} ${esc(k.apelido)}</b></div>
+        ${pv.map(l => { const c = l.conteudo, n = diasAte(c.data_prova || today()); return `<div class="bg-surface-container-lowest rounded-xl p-3 flex flex-col sm:flex-row sm:items-center gap-2"><span class="flex-1 min-w-0"><b class="text-label-lg text-on-surface block truncate">${esc(l.titulo || c.titulo || '')}</b><span class="text-body-sm text-on-surface-variant">${c.data_prova ? tx('Prova', 'Test') + ' ' + fmtD(c.data_prova) + ' · ' + (n <= 0 ? tx('é hoje', 'today') : n === 1 ? tx('amanhã', 'tomorrow') : tx(`em ${n} dias`, `in ${n} days`)) : tx('sem data', 'no date')}</span></span>
+          <span class="flex gap-1.5 flex-wrap"><button data-pdata="${k.id}|${esc(l.id)}|${c.data_prova || ''}" class="h-9 px-3 rounded-lg bg-surface-container text-label-sm text-on-surface">📅 ${tx('Mudar data', 'Change date')}</button><button data-pdesl="${k.id}|${esc(l.id)}" class="h-9 px-3 rounded-lg bg-surface-container text-label-sm text-on-surface">${tx('Desligar', 'Turn off')}</button></span></div>`; }).join('')}
+        <div class="flex gap-2 flex-wrap"><button data-pir="material" class="h-10 px-4 rounded-xl bg-primary-container text-on-primary text-label-md">❓ ${tx('Ver as perguntas da prova', 'See the test questions')}</button><button data-pir="resumo|${k.id}" class="h-10 px-4 rounded-xl bg-surface-container-lowest text-on-surface text-label-md">🧪 ${tx('Fazer um simulado', 'Set up a practice test')}</button></div>
+        <p class="text-body-sm text-on-surface-variant">${tx('No modo prova, a criança revisa só o material da prova até a data. O resto fica guardado e volta depois.', 'In test mode, your child reviews only the test material until the date. Everything else is kept for later.')}</p></section>`;
+    }).join('');
+  }
+  function modoHtml(lics, modos, tcfg) {
+    const opc = [['estudo', '📘', tx('Estudo do dia a dia', 'Everyday study'), tx('Usa o material que você mandou. Ligue ou pause matérias abaixo.', 'Uses the material you sent. Turn subjects on or off below.')], ['prova', '📝', tx('Modo prova', 'Test mode'), tx('Só o material "Cai na prova", até a data, com simulado.', 'Only "On the test" material until the date, with practice tests.')], ['ferias', '🏖️', tx('Modo férias', 'Holiday mode'), tx('Histórias narradas: 2 grátis; mais temas no Pacote Férias.', 'Narrated stories: 2 free; more in the Holiday Pack.')]];
+    return provaCard(lics, modos) + `<section class="${card} mb-5 space-y-3"><div class="flex items-center justify-between gap-2"><h2 class="text-headline-md text-on-surface">🎛️ ${tx('Modo de estudo', 'Study mode')}</h2></div><p class="text-body-sm text-on-surface-variant -mt-2">${tx('Escolha com 1 toque o que cada criança faz agora. Dá para trocar quando quiser.', 'Pick with 1 tap what each child does now. Change it anytime.')}</p>
+      ${A().kids.map(k => { const m = modoDe(modos, lics, k.id), np = provasDe(lics, k.id).length; return `<div class="space-y-2"><p class="text-label-lg text-on-surface">${esc(k.avatar)} ${esc(k.apelido)}</p><div class="grid grid-cols-1 sm:grid-cols-3 gap-2">${opc.map(([v, e, n, d2]) => `<button data-modo="${k.id}|${v}" class="text-left rounded-2xl border-2 p-3 transition active:scale-[0.99] ${m === v ? 'border-primary-container bg-primary-fixed/25' : 'border-surface-container-high bg-surface-container-lowest'}"><span class="flex items-center gap-2"><span class="text-[24px]">${e}</span><b class="text-label-lg text-on-surface flex-1">${n}</b>${m === v ? I('check_circle', 'text-primary text-[22px]', 1) : ''}</span><span class="block text-body-sm text-on-surface-variant mt-1">${d2}${v === 'prova' ? (np ? ` <b class="text-on-surface">${np} ${tx(np === 1 ? 'matéria de prova' : 'matérias de prova', np === 1 ? 'test subject' : 'test subjects')}</b>` : ` <b class="text-on-surface">${tx('Mande um material "Cai na prova" abaixo.', 'Send "On the test" material below.')}</b>`) : ''}</span></button>`).join('')}</div></div>`; }).join('')}</section>`;
+  }
+  function wireModo(lics, modos) {
+    app().querySelectorAll('[data-modo]').forEach(b => b.onclick = async () => {
+      const [kid, m] = b.dataset.modo.split('|');
+      if (m === 'prova' && !provasDe(lics, kid).length) { toast(tx('Primeiro mande o material com a opção "Cai na prova" e a data. 📝', 'First send material with "On the test" and the date. 📝'), 4500); const el = $('#mat'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      try { await DB.ins('progresso', { crianca_id: kid, chave: 'modo', dados: { modo: m, em: new Date().toISOString() }, atualizado_em: new Date().toISOString() }, { upsert: true, onConflict: 'crianca_id,chave' }); toast('✅ ' + ({ estudo: tx('Estudo do dia a dia ligado', 'Everyday study on'), prova: tx('Modo prova ligado', 'Test mode on'), ferias: tx('Modo férias ligado', 'Holiday mode on') })[m]); render(); } catch (x) { toast(x.message); }
+    });
+    app().querySelectorAll('[data-pdata]').forEach(b => b.onclick = async () => {
+      const [kid, lid, d0] = b.dataset.pdata.split('|'); const nd = prompt(tx('Nova data da prova (AAAA-MM-DD):', 'New test date (YYYY-MM-DD):'), d0 || today()); if (!nd) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(nd.trim())) return toast(tx('Use o formato 2026-11-25.', 'Use the format 2026-11-25.'));
+      try { await DB.rpc('gerir_prova', { crianca: kid, licao: lid, data_prova: nd.trim(), ligado: true }); toast('✅'); render(); } catch (x) { toast(/gerir_prova|function|schema/i.test(x.message) ? tx('Falta rodar o SQL 09 no Supabase.', 'Run SQL 09 in Supabase.') : x.message, 4500); }
+    });
+    app().querySelectorAll('[data-pdesl]').forEach(b => b.onclick = async () => {
+      const [kid, lid] = b.dataset.pdesl.split('|'); if (!confirm(tx('Desligar o modo prova desta matéria? As perguntas continuam no estudo do dia a dia.', 'Turn off test mode for this subject? Its questions stay in everyday study.'))) return;
+      try { await DB.rpc('gerir_prova', { crianca: kid, licao: lid, data_prova: null, ligado: false }); toast('✅'); render(); } catch (x) { toast(/gerir_prova|function|schema/i.test(x.message) ? tx('Falta rodar o SQL 09 no Supabase.', 'Run SQL 09 in Supabase.') : x.message, 4500); }
+    });
+    app().querySelectorAll('[data-pir]').forEach(b => b.onclick = () => { const [t2, k] = b.dataset.pir.split('|'); if (k) kidSel = k; tab = t2; render(); if (t2 === 'material') setTimeout(() => { const e2 = document.querySelector('[data-perg]'); if (e2) e2.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 900); else setTimeout(() => { const e2 = $('#simsave'); if (e2) e2.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 1200); });
   }
 
   /* ================= o que está sendo estudado agora ================= */
@@ -372,14 +426,24 @@
       ${qs.map((q, i) => { const ex = exemplo(q, lic.idioma); return `<div class="${card} space-y-1.5"><div class="flex items-center gap-2 flex-wrap"><span class="text-label-sm text-on-surface-variant">${i + 1}.</span><span class="px-2 py-0.5 rounded-full bg-surface-container-high text-label-sm text-on-surface">${esc(q.pilar === 'leitura' ? tx('Leitura', 'Reading') : A().skillInfo(q.skill || '').name)}</span>${q.vars ? `<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-label-sm">🔀 ${tx('números variam', 'numbers vary')}</span>` : ''}<span class="text-label-sm text-on-surface-variant ml-auto">${tx('Vista', 'Seen')} ${qn[q.id] || 0}x · ${st(q)}</span></div>
         <p class="text-label-lg text-on-surface">${md(ex.prompt)}</p>
         ${q.type === 'mc' ? `<ul class="text-body-sm space-y-0.5">${ex.options.map((o, j) => `<li class="${j === (q.answer || 0) ? 'text-primary font-extrabold' : 'text-on-surface-variant'}">${j === (q.answer || 0) ? '✓' : '·'} ${md(o)}</li>`).join('')}</ul>` : `<p class="text-body-md text-primary font-extrabold whitespace-pre-line">✓ ${md(AT(ex))}</p>`}
-        ${ex.explain ? `<p class="text-body-sm text-on-surface-variant">${md(ex.explain)}</p>` : ''}</div>`; }).join('')}
-      <p class="text-body-sm text-on-surface-variant">${tx('Achou uma pergunta errada ou estranha? Pause esta matéria e nos avise pelo e-mail de suporte.', 'Found a wrong or odd question? Pause this subject and let us know by support email.')}</p></div>`;
+        ${ex.explain ? `<p class="text-body-sm text-on-surface-variant">${md(ex.explain)}</p>` : ''}
+        <div class="flex gap-3 pt-1">${q.off ? `<span class="text-label-sm text-error">⏸ ${tx('Desativada', 'Turned off')}</span><button data-qon="${esc(q.id)}" class="text-label-sm text-primary underline">${tx('Ativar de novo', 'Turn back on')}</button>` : `<button data-qoff="${esc(q.id)}" class="text-label-sm text-on-surface-variant underline">⏸ ${tx('Desativar esta pergunta', 'Turn off this question')}</button><button data-qrep="${esc(q.id)}" class="text-label-sm text-on-surface-variant underline">⚠️ ${tx('Reportar erro', 'Report a problem')}</button>`}</div></div>`; }).join('')}
+      <p class="text-body-sm text-on-surface-variant">${tx('Achou uma pergunta errada ou estranha? Toque em "Reportar erro": ela sai das lições e nossa equipe confere.', 'Found a wrong or odd question? Tap "Report a problem": it leaves the lessons and our team checks it.')}</p></div>`;
     document.body.appendChild(ov);
     ov.onclick = e => { if (e.target === ov || e.target.closest('[data-x]')) ov.remove(); };
+    const liga = async (qid, ativa) => { try { await DB.rpc('gerir_pergunta', { crianca: lic.crianca_id, licao: lic.id, pergunta: qid, ativa }); const q = qs.find(x => x.id === qid); if (q) q.off = !ativa; ov.remove(); perguntasSheet(lic, prog, ts); toast('✅'); } catch (x) { toast(/gerir_pergunta|function|schema/i.test(x.message) ? tx('Falta rodar o SQL 09 no Supabase.', 'Run SQL 09 in Supabase.') : x.message, 4500); } };
+    ov.querySelectorAll('[data-qoff]').forEach(b => b.onclick = () => liga(b.dataset.qoff, false));
+    ov.querySelectorAll('[data-qon]').forEach(b => b.onclick = () => liga(b.dataset.qon, true));
+    ov.querySelectorAll('[data-qrep]').forEach(b => b.onclick = async () => {
+      const q = qs.find(x => x.id === b.dataset.qrep); const mot = prompt(tx('O que está errado nesta pergunta? (opcional)', 'What is wrong with this question? (optional)'), ''); if (mot === null) return;
+      DB.ins('reportes', { familia_id: A().fam.id, crianca_id: lic.crianca_id, licao_id: lic.id, pergunta_id: q.id, motivo: ('pais: ' + mot).slice(0, 60), quem: 'pais', pergunta: { prompt: q.prompt, options: q.options, answers: q.answers, type: q.type } }).catch(() => {});
+      liga(q.id, false); toast('💙 ' + tx('Obrigado! A pergunta saiu das lições e nossa equipe vai conferir.', 'Thanks! The question left the lessons and our team will check it.'), 4500);
+    });
   }
 
   /* ================= enviar material ================= */
   const MAX_ENVIO = 10; // páginas por envio
+  let envioLote = null;  // mesmo lote se precisar tentar de novo
   const TIPOS = () => [['estudo', '📘', tx('Estudo do dia a dia', 'Everyday study'), tx('Guia de estudo, lição de casa', 'Study guide, homework')], ['prova', '📝', tx('Cai na prova', 'On the test'), tx('Com a data da prova', 'With the test date')], ['outro', '➕', tx('Outro', 'Other'), tx('Qualquer outro material', 'Anything else')]];
   // insere aceitando banco sem as colunas novas (antes do SQL 05)
   async function insMat(row) {
@@ -399,10 +463,11 @@
   async function material() {
     if (!A().kids.length) return newChild(true);
     const fam = A().fam.id; const mes = today().slice(0, 7);
-    const moeda = (A().sub && A().sub.moeda) || (pt() ? 'brl' : 'usd');
+    const moeda = A().moeda();
     const [mats, lim, est, cred, prods, compras, tcfg, tdb] = await Promise.all([DB.sel('materiais', { eq: { familia_id: fam }, order: 'criado_em.desc', limit: 80 }), DB.sel('limites_ia', { eq: { plano: (A().sub || {}).plano || 'teste' } }).catch(() => []), estudandoData(),
       DB.sel('creditos', { eq: { familia_id: fam } }).catch(() => []), DB.sel('produtos', { eq: { moeda } }).catch(() => []), DB.sel('compras', { eq: { familia_id: fam } }).catch(() => []),
       DB.sel('progresso', { inn: { crianca_id: A().kids.map(k => k.id) }, eq: { chave: 'temas' } }).catch(() => []), DB.sel('temas', {}).catch(() => [])]);
+    const modos = await DB.sel('progresso', { inn: { crianca_id: A().kids.map(k => k.id) }, eq: { chave: 'modo' } }).catch(() => []);
     const creditos = (cred[0] && cred[0].paginas) || 0, prodCred = prods.find(p2 => p2.tipo === 'creditos'), prodTemas = prods.find(p2 => p2.tipo === 'temas');
     if (creditos > 0 && mats.some(m => m.status === 'sem_limite')) { DB.rpc('reprocessar_sem_limite').then(() => DB.fn('ia', {})).catch(() => {}); }
     const usado = mats.filter(m => String(m.criado_em).slice(0, 7) === mes).length; const max = (lim[0] && lim[0].paginas_mes) || 60;
@@ -412,7 +477,7 @@
     const tipoDe = m => m.tipo || (m.modo_prova ? 'prova' : 'estudo');
     const badge = m => { const t = TIPOS().find(x => x[0] === tipoDe(m)) || TIPOS()[0]; return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-label-sm ${t[0] === 'prova' ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface'}">${t[1]} ${t[2]}${t[0] === 'prova' && m.data_prova ? ' · ' + new Date(m.data_prova + 'T12:00').toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' }) : ''}</span>`; };
     const grupos = lotes(mats);
-    shell(`${estudandoHtml(est)}${temasHtml(compras.map(c => c.item), tcfg, tdb, prodTemas)}<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+    shell(`${modoHtml(est.lics, modos, tcfg)}${estudandoHtml(est)}${temasHtml(compras.map(c => c.item), tcfg, tdb, prodTemas)}<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
       <section class="lg:col-span-3 ${card} space-y-1 relative overflow-hidden">
         <div class="absolute -top-10 -right-10 w-36 h-36 bg-primary-container/10 rounded-full blur-2xl pointer-events-none"></div>
         <div class="flex items-center gap-3 relative"><div class="w-12 h-12 rounded-2xl bg-primary-container text-on-primary flex items-center justify-center">${I('photo_camera', 'text-[26px]', 1)}</div>
@@ -420,7 +485,7 @@
         ${lbl(tx('Para quem', 'For'))}<div class="flex flex-wrap gap-2">${A().kids.map(k => `<label class="cursor-pointer"><input type="radio" name="kid" value="${k.id}" class="peer sr-only" ${k.id === kidSel ? 'checked' : ''}><span class="flex items-center gap-2 px-4 h-12 rounded-full bg-surface-container text-label-md text-on-surface peer-checked:bg-primary-container peer-checked:text-on-primary">${esc(k.avatar)} ${esc(k.apelido)}</span></label>`).join('')}</div>
         ${lbl(tx('O que é este material?', 'What is this material?'))}
         <div class="grid grid-cols-3 gap-2" id="tipos">${TIPOS().map(([v, e, l, d]) => `<button data-tipo="${v}" class="rounded-2xl border-2 p-2.5 text-center flex flex-col items-center gap-1 ${v === tipo ? 'border-primary-container bg-primary-fixed/30' : 'border-surface-container-high bg-surface-container-lowest'}"><span class="text-[26px] leading-none">${e}</span><b class="text-label-md text-on-surface leading-tight">${l}</b><span class="text-[11px] leading-tight text-on-surface-variant hidden sm:block">${d}</span></button>`).join('')}</div>
-        <div id="pv" class="hidden">${lbl(tx('Data da prova', 'Test date'))}<input class="${inputCls}" type="date" id="dp" min="${today()}"><p class="text-body-sm text-on-surface-variant mt-1">${tx('Até a prova, a revisão foca só nesta matéria, com um teste no começo e outro no fim.', 'Until test day, review focuses only on this, with a check at the start and at the end.')}</p></div>
+        <div id="pv" class="hidden">${lbl(tx('Data da prova', 'Test date'))}<input class="${inputCls}" type="date" id="dp" min="${today()}"><p class="text-body-sm text-on-surface-variant mt-1">${tx('Até a prova, a revisão foca só nesta matéria, com um simulado no começo e outro no fim.', 'Until test day, review focuses only on this, with a check at the start and at the end.')}</p></div>
         ${lbl(tx('Matéria', 'Subject'))}<input class="${inputCls}" id="mat" maxlength="40" placeholder="${tx('Ex.: Ciências — ciclo da água', 'E.g. Science — water cycle')}">
         ${lbl(tx('Observação (opcional)', 'Note (optional)'))}<input class="${inputCls}" id="obs" maxlength="140" placeholder="${tx('Ex.: capítulo 4, páginas 30–35', 'E.g. chapter 4, pages 30–35')}">
         ${lbl(tx('Arquivos', 'Files') + ` <span class="text-on-surface-variant font-normal">· ${tx(`até ${MAX_ENVIO} páginas por envio`, `up to ${MAX_ENVIO} pages per send`)}</span>`)}
@@ -443,7 +508,9 @@
           <b class="text-label-lg text-on-surface block">${esc(g.materia || tx('Sem matéria informada', 'No subject given'))}</b>
           ${g.obs ? `<p class="text-body-sm text-on-surface-variant">“${esc(g.obs)}”</p>` : ''}
           <div class="flex items-center justify-between gap-2"><span class="text-body-sm text-on-surface-variant">${g.itens.length} ${g.itens.length === 1 ? tx('página', 'page') : tx('páginas', 'pages')}</span>
-          <span class="flex items-center gap-1 text-label-sm ${st[2]} text-right">${I(st[0], 'text-[18px] shrink-0', 1)}<span>${st[1]}</span></span></div></button>`; }).join('') || `<p class="${card} text-body-md text-on-surface-variant">${tx('Nada ainda.', 'Nothing yet.')}</p>`}</section></div>`);
+          <span class="flex items-center gap-1 text-label-sm ${st[2]} text-right">${I(st[0], 'text-[18px] shrink-0', 1)}<span>${st[1]}</span></span></div>${esperaHtml(g)}</button>`; }).join('') || `<p class="${card} text-body-md text-on-surface-variant">${tx('Nada ainda.', 'Nothing yet.')}</p>`}</section></div>`);
+    vigiarEspera(mats.filter(m => ['enviado', 'processando'].includes(m.status)).length);
+    wireModo(est.lics, modos);
     const upd = () => {
       $('#th').innerHTML = files.map((f, i) => `<div class="relative w-16 h-20 rounded-lg bg-surface-container bg-cover bg-center flex items-center justify-center border border-outline-variant" style="${/^image/.test(f.type) ? `background-image:url(${URL.createObjectURL(f)})` : ''}">${/pdf/.test(f.type) ? I('picture_as_pdf', 'text-error text-[28px]') : ''}<button data-rm="${i}" class="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-on-surface text-surface text-[14px] leading-none">×</button></div>`).join('');
       $('#th').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { files.splice(+b.dataset.rm, 1); upd(); });
@@ -481,20 +548,69 @@
       if (usado + files.length > max + creditos) { err.innerHTML = tx(`Limite do mês: ${max} páginas (a família toda)${creditos ? ` + ${creditos} de créditos` : ''}. Compre mais créditos abaixo para continuar.`, `Monthly limit: ${max} pages (whole family)${creditos ? ` + ${creditos} credits` : ''}. Buy credits below to continue.`); return; }
       if (files.find(f => f.size > 50 * 1024 * 1024)) { err.textContent = tx('Cada arquivo pode ter até 50 MB.', 'Each file can be up to 50 MB.'); return; }
       const prova = tipo === 'prova', dp = $('#dp').value; if (prova && !dp) { err.textContent = tx('Escolha a data da prova.', 'Pick the test date.'); return; }
-      const b = $('#send'); b.disabled = true; const kid = (app().querySelector('input[name=kid]:checked') || {}).value || kidSel, materia = $('#mat').value.trim(), obs = $('#obs').value.trim(); const ids = []; const lote = QK.uid();
+      const b = $('#send'); b.disabled = true; const kid = (app().querySelector('input[name=kid]:checked') || {}).value || kidSel, materia = $('#mat').value.trim(), obs = $('#obs').value.trim();
+      const lote = envioLote || (envioLote = QK.uid()); const label = b.querySelector('span:last-child');
+      // painel de progresso logo abaixo do botão
+      let box = $('#upbox'); if (!box) { box = document.createElement('div'); box.id = 'upbox'; b.insertAdjacentElement('afterend', box); }
+      const total = files.reduce((a, f) => a + f.size, 0) || 1;
+      const pinta = (i, frac) => {
+        const feito = files.slice(0, i).reduce((a, f) => a + f.size, 0) + (files[i] ? files[i].size * frac : 0), pct = Math.min(100, Math.round(100 * feito / total));
+        box.innerHTML = `<div class="mt-3 bg-surface-container-low rounded-2xl p-4 space-y-2"><div class="flex items-center gap-2"><span class="qk-ampulheta text-[20px]">⏳</span><b class="text-label-lg text-on-surface flex-1">${i < files.length ? tx(`Enviando foto ${i + 1} de ${files.length}…`, `Uploading photo ${i + 1} of ${files.length}…`) : tx('Quase lá…', 'Almost there…')}</b><span class="text-label-md text-on-surface-variant">${pct}%</span></div>
+          <div class="h-3 bg-surface-container-high rounded-full overflow-hidden"><div class="h-full bg-primary-container rounded-full transition-all duration-300" style="width:${Math.max(3, pct)}%"></div></div>
+          <p class="text-body-sm text-on-surface-variant">${tx('Pode levar até 1 minuto, dependendo da sua internet. Não feche o app.', 'This can take up to a minute depending on your connection. Please keep the app open.')}</p></div>`;
+      };
+      label.textContent = tx('Enviando…', 'Uploading…');
       try {
         for (let i = 0; i < files.length; i++) {
-          b.querySelector('span:last-child').textContent = `⏳ ${i + 1}/${files.length}`;
-          const f = files[i]; const safe = f.name.replace(/[^\w.-]+/g, '_').slice(-60); const path = `${fam}/${QK.uid()}-${safe}`;
-          await DB.upload('familia-materiais', path, f);
+          const f = files[i]; if (f._mat) { pinta(i + 1, 0); continue; }   // já foi (tentativa anterior)
+          pinta(i, 0);
+          const safe = f.name.replace(/[^\w.-]+/g, '_').slice(-60); const path = f._path || (f._path = `${fam}/${QK.uid()}-${safe}`);
+          await DB.upload('familia-materiais', path, f, frac => pinta(i, frac));
           const r = await insMat({ familia_id: fam, crianca_id: kid, caminho: path, materia: materia || null, modo_prova: prova, data_prova: prova ? dp : null, tipo, obs: obs || null, lote });
-          ids.push(r[0] && r[0].id);
+          f._mat = (r[0] && r[0].id) || 'ok';
         }
+        pinta(files.length, 0);
+        const ids = files.map(f => f._mat).filter(x => x && x !== 'ok');
         await DB.ins('ia_tarefas', { familia_id: fam, crianca_id: kid, tipo: 'gerar_licao', entrada: { materiais: ids, materia, tipo, obs, modo_prova: prova, data_prova: prova ? dp : null } }).catch(e => console.warn(e));
         DB.fn('ia', {}).catch(() => {});
-        toast(tx('✅ Enviado! As lições aparecem para a criança quando ficarem prontas.', '✅ Sent! Lessons show up for your child when ready.'), 4000); material();
-      } catch (x) { err.textContent = x.message; b.disabled = false; b.querySelector('span:last-child').textContent = tx('Enviar', 'Send'); }
+        envioLote = null;
+        toast(tx('✅ Enviado! O Quico já está criando as lições.', '✅ Sent! Quico is already creating the lessons.'), 4000); material();
+      } catch (x) {
+        const rede = /rede|network|failed to fetch/i.test(x.message);
+        box.innerHTML = `<div class="mt-3 bg-error-container text-on-error-container rounded-2xl p-4 space-y-1"><b class="text-label-lg">${rede ? tx('A internet caiu no meio do envio.', 'The connection dropped during the upload.') : tx('Não deu para enviar.', "Couldn't upload.")}</b><p class="text-body-sm">${rede ? tx('Suas fotos continuam aqui. Toque em "Tentar de novo": o envio continua de onde parou.', 'Your photos are still here. Tap "Try again": it picks up where it stopped.') : esc(x.message)}</p></div>`;
+        b.disabled = false; label.textContent = tx('Tentar de novo', 'Try again');
+      }
     };
+  }
+  // enquanto a IA trabalha: Quico mostra as etapas, o tempo estimado e acalma o pai
+  const DICAS = () => [tx('💡 Elogie o esforço, não só o acerto: "Você se esforçou muito hoje!"', '💡 Praise effort, not just right answers: "You worked really hard today!"'), tx('💡 Um horário fixo (ex.: depois do lanche) vira hábito em poucas semanas.', '💡 A fixed time (e.g. after snack) becomes a habit in a few weeks.'), tx('🧠 Curiosidade: rever um conteúdo em dias diferentes ajuda o cérebro a guardar por mais tempo.', '🧠 Fun fact: reviewing on different days helps the brain remember longer.'), tx('💡 Peça para seu filho te ensinar o que aprendeu: explicar é um dos melhores jeitos de fixar.', '💡 Ask your child to teach you what they learned: explaining helps it stick.')];
+  function esperaHtml(g) {
+    if (!['enviado', 'processando'].includes(g.status) || g.itens.some(m => m.status === 'erro')) return '';
+    const min = Math.max(0, Math.floor((Date.now() - new Date(g.criado_em)) / 60000)), demorou = min >= 10;
+    return `<div class="mt-2 rounded-2xl ${demorou ? 'bg-error-container/40' : 'bg-primary-fixed/25'} p-3 space-y-1.5" data-wait="${new Date(g.criado_em).getTime()}">
+      <div class="flex items-center gap-2"><span class="qk-ampulheta text-[22px]">⏳</span><b class="text-label-md text-on-surface" data-etapa>${tx('Lendo as páginas…', 'Reading the pages…')}</b></div>
+      <p class="text-body-sm text-on-surface-variant">${demorou ? tx('Está demorando mais que o normal. Toque em "Tentar de novo" ou espere mais um pouco.', 'This is taking longer than usual. Tap "Try again" or wait a little more.') : tx('Fica pronto em uns 2 a 5 minutos. Estamos caprichando para criar a melhor experiência para o seu filho. Pode fechar o app: as lições aparecem sozinhas.', "Ready in about 2–5 minutes. We're crafting the best experience for your child. You can close the app: lessons show up on their own.")}</p>
+      <p class="text-body-sm text-on-surface" data-dica>${DICAS()[min % DICAS().length]}</p>
+      ${demorou ? `<span role="button" data-retry class="inline-flex h-9 px-3 items-center rounded-lg bg-primary-container text-on-primary text-label-sm">🔄 ${tx('Tentar de novo', 'Try again')}</span>` : ''}</div>`;
+  }
+  let esperaTimer = null;
+  function vigiarEspera(antes) {
+    clearInterval(esperaTimer);
+    const ETAPAS = [[0, tx('Lendo as páginas…', 'Reading the pages…')], [40, tx('Criando as perguntas…', 'Writing the questions…')], [110, tx('Conferindo as contas e as respostas…', 'Checking the math and answers…')], [200, tx('Quase pronto…', 'Almost ready…')]];
+    const pinta = () => document.querySelectorAll('[data-wait]').forEach(w => { const sec = (Date.now() - +w.dataset.wait) / 1000; const e = ETAPAS.filter(x => sec >= x[0]).pop(); const el = w.querySelector('[data-etapa]'); if (el && e) el.textContent = e[1]; });
+    pinta();
+    document.querySelectorAll('[data-retry]').forEach(b => b.onclick = ev => { ev.stopPropagation(); DB.fn('ia', {}).catch(() => {}); toast('🔄 ' + tx('Pedimos para a IA tentar de novo.', 'We asked the AI to try again.')); });
+    if (!document.querySelector('[data-wait]')) return;
+    let n = 0;
+    esperaTimer = setInterval(async () => {
+      if (!document.querySelector('[data-wait]')) return clearInterval(esperaTimer);
+      pinta(); if (++n % 3) return;   // confere no banco a cada ~12 s
+      try {
+        const ms = await DB.sel('materiais', { eq: { familia_id: A().fam.id }, order: 'criado_em.desc', limit: 40 });
+        const agora = ms.filter(m => ['enviado', 'processando'].includes(m.status)).length;
+        if (agora < antes) { clearInterval(esperaTimer); if (A().cheer) A().cheer(0); toast('🎉 ' + tx('Lições prontas!', 'Lessons ready!'), 4000); material(); }
+      } catch (e) {}
+    }, 4000);
   }
   // ver um envio: fotos (se ainda existirem) e a observação
   async function verEnvio(g, badge, status, verPerg) {
@@ -601,7 +717,7 @@
           else { const ins = () => DB.ins('criancas', Object.assign({ familia_id: A().fam.id }, row)); const r = await ins().catch(e => { semMes(e); return ins(); }); id = r[0].id; }
           if (pin) await DB.rpc('definir_pin', { crianca: id, pin });
           await A().loadFamily(); kidSel = id; toast('✅ ' + tx('Salvo', 'Saved'));
-          if (first) return A().picker(); tab = 'criancas'; render();
+          if (first) { A().fecharPais(); return A().picker(); } tab = 'criancas'; render();
         } catch (x) { err.textContent = x.message; }
       };
     };
@@ -609,6 +725,11 @@
   }
 
   /* ================= conta e assinatura ================= */
+  async function mudarPais(p) {
+    if (p === A().pais()) return;
+    try { await DB.rpc('definir_pais', { p }); } catch (x) { if (/definir_pais|function|schema/i.test(x.message)) return toast(tx('Falta rodar o SQL 09 no Supabase.', 'Run SQL 09 in Supabase.'), 4500); return toast(x.message); }
+    if (A().famRow) A().famRow.pais = p; toast('✅ ' + (p === 'US' ? tx('Estados Unidos: preços em dólar.', 'United States: prices in US$.') : tx('Brasil: preços em reais.', 'Brazil: prices in R$.'))); render();
+  }
   async function copiar(t) { try { await navigator.clipboard.writeText(t); toast('📋 ' + tx('Copiado!', 'Copied!')); } catch (e) { const i = document.createElement('textarea'); i.value = t; document.body.appendChild(i); i.select(); try { document.execCommand('copy'); toast('📋 ' + tx('Copiado!', 'Copied!')); } catch (e2) { toast(t, 6000); } i.remove(); } }
   /* ================= parceiros: indique e ganhe / influenciadores ================= */
   const money = (c, m) => (String(m).toLowerCase() === 'usd' ? '$' : 'R$ ') + (c / 100).toFixed(2).replace('.', String(m).toLowerCase() === 'usd' ? '.' : ',');
@@ -622,7 +743,7 @@
       ${lbl(`${tx('Desconto para quem assinar', 'Discount for new subscribers')}: <b id="afdv">${des}%</b> · ${tx('sua comissão', 'your commission')}: <b id="afcv">${cfg.pote - des}%</b>`)}
       <input id="afd" type="range" min="0" max="${cfg.max_desconto}" step="5" value="${des}">
       <p class="text-body-sm text-on-surface-variant" id="afx"></p>
-      ${lbl(tx('Chave PIX para receber (ou e-mail do PayPal fora do Brasil)', 'PIX key to get paid (or PayPal email outside Brazil)'))}<input id="afp" class="${inputCls}" maxlength="120" value="${esc(a ? a.pix || '' : '')}">
+      ${lbl(A().pais() === 'US' ? tx('E-mail do PayPal ou Zelle para receber', 'PayPal or Zelle email to get paid') : tx('Chave PIX para receber', 'PIX key to get paid'))}<input id="afp" class="${inputCls}" maxlength="120" value="${esc(a ? a.pix || '' : '')}">
       ${btnP('afs', a ? tx('Salvar', 'Save') : tx('Quero ser parceiro', 'Become a partner'), 'check')}
       ${a ? `<div class="bg-surface-container-low rounded-2xl p-3 space-y-2"><p class="text-label-sm text-on-surface-variant">🇧🇷 ${tx('Seu link em português', 'Your link in Portuguese')}</p><p class="text-body-md text-on-surface break-all">${esc(link)}</p>
         <div class="grid grid-cols-2 gap-2"><button id="afcopy" class="h-10 rounded-xl bg-surface-container text-label-md text-on-surface">📋 ${tx('Copiar link', 'Copy link')}</button><button id="afshare" class="h-10 rounded-xl bg-surface-container text-label-md text-on-surface">💬 ${tx('Compartilhar', 'Share')}</button></div>
@@ -698,6 +819,11 @@
           <p class="text-body-sm text-on-surface-variant">${tx('Parceiros', 'Partners')}: ${(d.afiliados || []).map(a => `${esc(a.codigo)} (${a.desconto_pct}% desc · ${a.comissao_pct}% com · ${a.indicados} ${tx('cadastros', 'sign-ups')})`).join(' · ') || '—'}</p></section>
         <section class="${card} space-y-2"><h2 class="text-headline-md text-on-surface">⭐ ${tx('Notas das provas (feedback dos pais)', 'Test results (parent feedback)')}</h2>${(d.feedbacks || []).map(x => `<div class="border-b border-surface-container-high py-1.5"><b class="text-label-md">${esc(x.materia || '')} · ${x.nota ?? '—'}</b>${x.autoriza_depoimento ? ' <span class="text-primary text-label-sm">✓ ' + tx('pode usar como depoimento', 'ok to use as testimonial') + '</span>' : ''}<p class="text-body-sm text-on-surface-variant">${esc(x.comentario || '')}</p></div>`).join('') || `<p class="text-body-sm text-on-surface-variant">—</p>`}</section>
       </div>
+      <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface">⚠️ ${tx('Perguntas com problema', 'Questions with problems')}</h2>
+        <p class="text-body-sm text-on-surface-variant">${tx('Reportadas pela criança, pelos pais ou pela conferência automática do app. A criança já não vê mais a pergunta; aqui você decide se desativa para sempre.', 'Reported by kids, parents or the automatic check. The child no longer sees it; decide here whether to turn it off for good.')}</p>
+        <div id="replist" class="space-y-2"><p class="text-body-sm text-on-surface-variant">…</p></div></section>
+      <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface">🧮 ${tx('Custo de IA por envio', 'AI cost per upload')}</h2>
+        <div id="custlist" class="space-y-2"><p class="text-body-sm text-on-surface-variant">…</p></div></section>
       <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface">👪 ${tx('Contas', 'Accounts')}</h2>
         <p class="text-body-sm text-on-surface-variant">${tx('Para testar o cadastro do zero: apague a conta e entre de novo com o mesmo e-mail (ou crie a conta de novo). Logins de administrador nunca são apagados: eles ganham uma família nova vazia.', 'To test sign-up from scratch: delete the account and log in again. Admin logins are never deleted: they get a new empty family.')}</p>
         <div class="flex gap-2"><input id="cbusca" class="${inputCls}" type="search" placeholder="${tx('Buscar por e-mail', 'Search by email')}"><button id="cbtn" class="h-12 px-4 rounded-xl bg-surface-container-high text-on-surface text-label-lg">${tx('Buscar', 'Search')}</button></div>
@@ -733,6 +859,26 @@
     };
     $('#cbtn').onclick = contas; $('#cbusca').onkeydown = e => { if (e.key === 'Enter') contas(); };
     contas();
+    const sql09 = x => /admin_|function|schema/i.test(x.message) ? tx('Rode o SQL 09 no Supabase.', 'Run SQL 09 in Supabase.') : esc(x.motivo || x.message);
+    const reps = async () => {
+      const bx = $('#replist'); if (!bx) return; let rs = [];
+      try { rs = await DB.rpc('admin_reportes'); } catch (x) { bx.innerHTML = `<p class="text-body-sm text-error">${sql09(x)}</p>`; return; }
+      const MOT = { texto: tx('texto estranho', 'odd text'), resposta: tx('resposta errada', 'wrong answer'), entendi: tx('não entendeu', "didn't understand"), outro: tx('outro', 'other') };
+      bx.innerHTML = rs.map(r => `<div class="border-b border-surface-container-high pb-2"><p class="text-label-sm text-on-surface-variant">${new Date(r.criado_em).toLocaleString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · ${r.quem === 'auto' ? '🤖 ' + tx('automático', 'automatic') : r.quem === 'pais' ? '👪 ' + tx('pais', 'parents') : '🧒 ' + tx('criança', 'child')} · ${esc(MOT[r.motivo] || String(r.motivo || '').replace(/^auto:/, ''))}${r.vezes > 1 ? ` · ${r.vezes}×` : ''}${r.licao ? ' · ' + esc(r.licao) : ''}</p>
+        <p class="text-body-md text-on-surface">${esc(String((r.pergunta && r.pergunta.prompt) || r.pergunta_id).slice(0, 220))}</p>
+        <div class="flex gap-2 mt-1"><button data-rres="${r.id}|1" class="h-8 px-3 rounded-lg bg-error-container text-on-error-container text-label-sm">${tx('Desativar pergunta', 'Turn off question')}</button><button data-rres="${r.id}|0" class="h-8 px-3 rounded-lg bg-surface-container-high text-on-surface text-label-sm">${tx('Está certa, manter', "It's fine, keep")}</button></div></div>`).join('') || `<p class="text-body-sm text-on-surface-variant">✅ ${tx('Nenhuma pergunta com problema.', 'No problem questions.')}</p>`;
+      bx.querySelectorAll('[data-rres]').forEach(b => b.onclick = async () => { const [id, d2] = b.dataset.rres.split('|'); try { await DB.rpc('admin_resolver_reporte', { rid: +id, desativar: d2 === '1' }); toast('✅'); reps(); } catch (x) { toast(x.message); } });
+    };
+    reps();
+    (async () => {
+      const bx = $('#custlist'); if (!bx) return; let cs = [];
+      try { cs = await DB.rpc('admin_custos'); } catch (x) { bx.innerHTML = `<p class="text-body-sm text-error">${sql09(x)}</p>`; return; }
+      const tot = cs.reduce((a, c) => a + (+c.usd || 0), 0), pags = cs.reduce((a, c) => a + (+c.paginas || 0), 0);
+      bx.innerHTML = cs.length ? `<p class="text-body-md text-on-surface">${tx('Últimos', 'Last')} ${cs.length} ${tx('envios', 'uploads')}: <b>$${tot.toFixed(2)}</b> · ${tx('média por envio', 'avg per upload')} <b>$${(tot / cs.length).toFixed(3)}</b> · ${tx('por página', 'per page')} <b>$${pags ? (tot / pags).toFixed(3) : '—'}</b></p>
+        <div class="overflow-x-auto"><table class="w-full text-body-sm"><thead><tr class="text-left text-on-surface-variant"><th class="py-1 pr-2">${tx('Data', 'Date')}</th><th class="pr-2">${tx('Família', 'Family')}</th><th class="pr-2">${tx('Págs', 'Pages')}</th><th class="pr-2">${tx('Perg.', 'Qs')}</th><th class="pr-2">Tokens</th><th>US$</th></tr></thead><tbody>
+        ${cs.map(c => `<tr class="border-t border-surface-container-high"><td class="py-1 pr-2 whitespace-nowrap">${new Date(c.feito_em).toLocaleDateString(pt() ? 'pt-BR' : 'en-US')}</td><td class="pr-2 max-w-[140px] truncate">${esc(c.email || '—')}</td><td class="pr-2">${c.paginas ?? '—'}</td><td class="pr-2">${c.perguntas ?? '—'}${c.removidas ? ` <span class="text-error">(−${c.removidas})</span>` : ''}</td><td class="pr-2 whitespace-nowrap">${c.tok_in ? Math.round(c.tok_in / 1000) + 'k / ' + Math.round((c.tok_out || 0) / 1000) + 'k' : '—'}</td><td>${c.usd != null ? (+c.usd).toFixed(3) : '—'}</td></tr>`).join('')}</tbody></table></div>
+        <p class="text-[12px] text-on-surface-variant">${tx('Tokens: entrada / saída. "−N" = perguntas descartadas pela dupla conferência. Envios antigos (antes de hoje) não têm tokens.', 'Tokens: input / output. "−N" = questions discarded by the double check. Older uploads have no token data.')}</p>` : `<p class="text-body-sm text-on-surface-variant">—</p>`;
+    })();
     const pg = $('#pagar'); if (pg) pg.onclick = async () => { if (!confirm(tx('Marcar todas as comissões listadas como pagas? Faça isso depois de enviar os PIX.', 'Mark all listed commissions as paid? Do this after sending payouts.'))) return; try { await DB.rpc('admin_pagar_comissao', { ids: d.comissoes.map(x => x.id) }); toast('✅'); render(); } catch (x) { toast(x.message); } };
     $('#tsave').onclick = async () => {
       const tit = $('#tt').value.trim(); if (!tit) return toast(tx('Coloque o título.', 'Add a title.'));
@@ -751,7 +897,7 @@
   async function conta() {
     const [afp, adm] = await Promise.all([DB.rpc('meu_painel_afiliado').catch(() => null), DB.rpc('sou_admin').catch(() => false)]);
     const s = A().sub || {};
-    const moeda = localStorage.getItem('qk.moeda') || (pt() ? 'brl' : 'usd');
+    const moeda = A().moeda();
     const [precos, vagas, conv] = await Promise.all([DB.sel('precos', { eq: { moeda } }).catch(() => []), DB.rpc('vagas_fundador').catch(() => 0), DB.sel('convites', { eq: { familia_id: A().fam.id } }).catch(() => [])]);
     const fund = moeda === 'brl' && vagas > 0;
     const pick = pl => precos.find(p => p.plano === pl && !!p.fundador === fund) || precos.find(p => p.plano === pl);
@@ -765,7 +911,7 @@
           ${A().trialLeft() !== null ? `<p class="text-body-md text-on-surface-variant">${tx(`Faltam <b class="text-on-surface">${A().trialLeft()} dias</b> de teste grátis. Sem cartão: escolha um plano quando quiser.`, `<b class="text-on-surface">${A().trialLeft()} days</b> of free trial left. No card needed until you pick a plan.`)}</p>` : ''}
           ${s.valido_ate && paying ? `<p class="text-body-sm text-on-surface-variant">${tx('Renova em', 'Renews on')} ${new Date(s.valido_ate).toLocaleDateString(pt() ? 'pt-BR' : 'en-US')}</p>` : ''}
           ${paying ? btnS('portal', tx('Gerenciar assinatura (cartão, trocar ou cancelar)', 'Manage subscription (card, switch or cancel)'), 'credit_card') : ''}</section>
-        ${!paying && s.plano !== 'cortesia' ? `<section class="space-y-3"><div class="flex items-center justify-between gap-2"><h2 class="text-headline-md text-on-surface">${tx('Escolha seu plano', 'Choose your plan')}</h2>${seg([['brl', 'R$'], ['usd', 'US$']], moeda, 'data-m')}</div>
+        ${!paying && s.plano !== 'cortesia' ? `<section class="space-y-3"><div class="flex items-center justify-between gap-2"><h2 class="text-headline-md text-on-surface">${tx('Escolha seu plano', 'Choose your plan')}</h2>${seg([['BR', '🇧🇷 Brasil'], ['US', '🇺🇸 USA']], A().pais(), 'data-pais')}</div>
           ${fund ? `<div class="bg-secondary-fixed text-on-secondary-fixed rounded-2xl p-3.5 flex items-center gap-3">${I('redeem', 'text-[22px]')}<span class="text-label-md">${tx(`Preço de fundador: restam ${vagas} vagas. O preço fica com você enquanto mantiver a assinatura.`, `Founder price: ${vagas} spots left.`)}</span></div>` : ''}
           <div class="max-w-xl">${QKOnboard.plansHtml(precos, moeda, fund, localStorage.getItem('qk.planoEscolhido') || 'anual')}
           <div class="mt-4">${btnP('assinar', tx('Assinar o plano escolhido', 'Subscribe to the selected plan'), 'workspace_premium')}</div>
@@ -785,6 +931,12 @@
         ${afp ? parceiroHtml(afp) : ''}
         ${adm === true ? `<button id="gest" class="w-full h-14 rounded-2xl bg-inverse-surface text-inverse-on-surface text-label-lg flex items-center justify-center gap-2">${I('admin_panel_settings', 'text-[22px]')} ${tx('Painel de gestão (só você vê)', 'Admin panel (only you see this)')}</button>` : ''}
         <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('lock', 'text-primary')} ${tx('Senha dos pais', 'Parents password')}</h2><p class="text-body-sm text-on-surface-variant">${tx('4 números para entrar nesta área. As crianças não devem saber.', '4 digits to enter this area. Keep it from the kids.')}</p>${btnS('senha', tx('Mudar a senha dos pais', 'Change parents password'), 'password')}</section>
+        <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('public', 'text-primary')} ${tx('Onde a família mora', 'Where your family lives')}</h2>
+          <p class="text-body-sm text-on-surface-variant">${tx('Define a moeda dos preços, as formas de pagamento (Pix só no Brasil) e o currículo das lições (BNCC ou americano).', 'Sets the price currency, payment methods (Pix only in Brazil) and the lesson curriculum (Brazilian or US).')}</p>
+          ${seg([['BR', '🇧🇷 Brasil'], ['US', '🇺🇸 ' + tx('Estados Unidos', 'United States')]], A().pais(), 'data-pais')}</section>
+        <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('lock_clock', 'text-primary')} ${tx('Área dos pais aberta por', 'Keep Parents area open for')}</h2>
+          <p class="text-body-sm text-on-surface-variant">${tx('Sem pedir a senha de novo, mesmo se o celular bloquear ou você for para outro app. Ao tocar em "Voltar para a criança", fecha na hora.', 'No password again, even if the phone locks or you switch apps. Tapping "Back to your child" closes it right away.')}</p>
+          ${seg([['5', '5 min'], ['10', '10 min'], ['30', '30 min']], String(A().paisMin()), 'data-pmin')}</section>
         <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('volume_up', 'text-primary')} ${tx('Sons do app', 'App sounds')}</h2><p class="text-body-sm text-on-surface-variant">${tx('Sons baixinhos quando a criança acerta, erra ou termina. Ajudam você a perceber que ela está fazendo a lição.', 'Soft sounds when your child gets it right, wrong or finishes. They let you hear the lesson is happening.')}</p>${seg([['1', '🔊 ' + tx('Ligado', 'On')], ['0', '🔇 ' + tx('Desligado', 'Off')]], localStorage.getItem('qk.som') === '0' ? '0' : '1', 'data-som')}</section>
         <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('language', 'text-primary')} ${tx('Idioma do painel', 'Panel language')}</h2>${seg([['pt', 'Português'], ['en', 'English']], QK.lang, 'data-l')}</section>
         <section class="${card} space-y-2"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('help', 'text-primary')} ${tx('Ajuda', 'Help')}</h2>
@@ -793,7 +945,8 @@
           <p class="text-body-sm text-on-surface-variant">${tx('Para apagar todos os dados da família, escreva para o suporte.', 'To delete all family data, email support.')}</p>
           <p class="text-label-sm text-outline">${esc((Auth.user && Auth.user.email) || '')}</p>${btnS('out', t('sair'), 'logout')}</section>
       </div></div>`);
-    app().querySelectorAll('[data-m]').forEach(b => b.onclick = () => { localStorage.setItem('qk.moeda', b.dataset.m); render(); });
+    app().querySelectorAll('[data-pais]').forEach(b => b.onclick = () => mudarPais(b.dataset.pais));
+    app().querySelectorAll('[data-pmin]').forEach(b => b.onclick = () => { try { localStorage.setItem('qk.paisMin', b.dataset.pmin); } catch (e) {} A().abrirPais(); render(); });
     app().querySelectorAll('[data-som]').forEach(b => b.onclick = () => { try { localStorage.setItem('qk.som', b.dataset.som); } catch (e) {} if (b.dataset.som === '1') A().sfx('ok'); render(); });
     app().querySelectorAll('[data-at]').forEach(b => b.onclick = () => { A().setAdultTema(b.dataset.at); render(); });
     app().querySelectorAll('[data-l]').forEach(b => b.onclick = () => { QK.setLang(b.dataset.l); render(); });
@@ -828,7 +981,7 @@
     };
     $('#acc').onclick = async () => { const c = $('#cod').value.trim(); if (!c) return; try { await DB.rpc('aceitar_convite', { cod: c }); toast('✅ ' + tx('Você entrou na família!', 'You joined the family!')); await A().loadFamily(); A().picker(); } catch (x) { toast(A().inviteErr(x), 4500); } };
     $('#senha').onclick = () => A().createParentPass(() => { tab = 'conta'; open().then(() => { tab = 'conta'; render(); }); });
-    $('#out').onclick = async () => { await Auth.signOut(); A().boot(); };
+    $('#out').onclick = async () => { A().fecharPais(); await Auth.signOut(); A().boot(); };
   }
 
   window.QKParent = { open, newChild };

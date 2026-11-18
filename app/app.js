@@ -119,6 +119,9 @@
     A.kids = kids.filter(k => !k.arquivada);
   }
   A.loadFamily = loadFamily;
+  // país da família define moeda, Pix, currículo e formatos (Brasil × Estados Unidos)
+  A.pais = () => (A.famRow && A.famRow.pais) || (QK.lang === 'en' ? 'US' : 'BR');
+  A.moeda = () => A.pais() === 'US' ? 'usd' : 'brl';
   function inviteErr(x) { const m = String((x && x.message) || x); return /inválido|vencido|invalid|expired/i.test(m) ? P('Esse código não vale mais (vence em 3 dias) ou foi digitado errado. Peça um convite novo.', 'This code is no longer valid (3 days) or was mistyped. Ask for a new invite.') : /demo/i.test(m) ? P('No modo demonstração não há convites. Toque em "Sair da demo".', 'No invites in demo mode. Tap "Exit demo".') : m; }
   A.inviteErr = inviteErr;
   A.planOk = () => {
@@ -157,9 +160,12 @@
       // convite por e-mail: se alguém convidou este e-mail, entra sozinho na família
       if (!QK.DEMO) await DB.rpc('aceitar_convite_email').then(f => { if (f) toast('✅ ' + P('Você entrou na família que te convidou!', 'You joined the family that invited you!'), 4000); }).catch(() => {});
       await loadFamily();
+      if (/[?&]upsell=1/.test(location.search) && A.kids.length) { history.replaceState(null, '', location.pathname); return QKOnboard.start({ first: true, jump: 'upsell', apelido: A.kids[0].apelido }); }
       if (/[?&]pago=1/.test(location.search)) { toast(P('🎉 Assinatura confirmada! Obrigado.', '🎉 Subscription confirmed! Thank you.'), 4000); history.replaceState(null, '', location.pathname); }
       if (!A.kids.length) return QKOnboard.start({ first: true });
       if (QKOnboard.needTerms()) return QKOnboard.terms(picker);
+      // o celular dormiu ou o pai foi para outro app e a página recarregou: volta direto para a Área dos pais (até 10 min sem uso)
+      if (paisAberto() && flag('qk.naPais') === '1') return QKParent.open();
       picker();
     } catch (x) {
       if (x.message === 'sessao') return authScreen('entrar');
@@ -173,7 +179,7 @@
 
   /* ================= quem vai estudar ================= */
   function picker() {
-    theme('simples', adultTema()); A.kid = null; A.eng = null; A.ret = null;
+    fecharPais(); theme('simples', adultTema()); A.kid = null; A.eng = null; A.ret = null;
     const tl = A.trialLeft();
     view(`<main class="min-h-screen px-margin md:px-margin-tablet py-10 max-w-4xl mx-auto">
       <div class="flex items-center gap-3 mb-8">${logo}<span class="text-headline-md text-on-surface">Quest Kids</span></div>
@@ -214,7 +220,14 @@
     A.ret = { kid, go: () => { A.ret = null; A.kid = kid; theme(kid.estilo, kid.tema); document.documentElement.lang = kid.idioma_app === 'en' ? 'en' : 'pt-BR'; resume(); } };
     parentGate();
   }
-  A.backFromParents = () => { if (A.ret && A.ret.kid && A.eng) return A.ret.go(); A.ret = null; picker(); };
+  A.backFromParents = () => { fecharPais(); if (A.ret && A.ret.kid && A.eng) return A.ret.go(); A.ret = null; picker(); };
+  // Área dos pais fica aberta por alguns minutos sem uso (padrão 10), mesmo se o celular dormir ou mudar de app
+  const paisMin = () => +(flag('qk.paisMin') || 10);
+  function paisAberto() { return +(flag('qk.paisAte') || 0) > Date.now(); }
+  function abrirPais() { flag('qk.paisAte', String(Date.now() + paisMin() * 60000)); flag('qk.naPais', '1'); }
+  function fecharPais() { flag('qk.paisAte', null); flag('qk.naPais', null); }
+  A.abrirPais = abrirPais; A.fecharPais = fecharPais; A.paisMin = paisMin;
+  ['click', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => { if (flag('qk.naPais') === '1' && paisAberto()) abrirPais(); }, { passive: true, capture: true }));
   const gateBack = () => A.backFromParents();
 
   /* ---------- senha dos pais (4 números) ---------- */
@@ -256,7 +269,9 @@
   }
   A.createParentPass = createParentPass;
   async function parentGate(then) {
-    const ok = then || (() => QKParent.open());
+    const ok0 = then || (() => QKParent.open());
+    const ok = () => { abrirPais(); ok0(); };
+    if (paisAberto()) return ok();
     let has;
     try { has = await DB.rpc('tem_senha_pais', {}); } catch (e) { has = null; }   // null: banco ainda sem a senha dos pais (04-senha-pais.sql)
     if (has === null) return mathGate(ok);
@@ -318,8 +333,10 @@
     A.kid = kid; theme(kid.estilo, kid.tema); document.documentElement.lang = kid.idioma_app === 'en' ? 'en' : 'pt-BR';
     try {
       await QKEngine.loadPack(kid.pacote).catch(e => console.warn(e));
-      const [prog, lic, sim] = await Promise.all([DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'main' } }), DB.sel('licoes', { eq: { crianca_id: kid.id }, order: 'criado_em.desc', limit: 60 }), DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'sim' } }).catch(() => [])]);
+      const [prog, lic, sim, modo] = await Promise.all([DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'main' } }), DB.sel('licoes', { eq: { crianca_id: kid.id }, order: 'criado_em.desc', limit: 60 }), DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'sim' } }).catch(() => []), DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'modo' } }).catch(() => [])]);
       A.eng = new QKEngine(kid, prog[0] && prog[0].dados, lic);
+      A.eng.aplicarModo(modo[0] && modo[0].dados && modo[0].dados.modo);
+      A.eng.onBroken = (q, motivo) => reportar(q, 'auto:' + motivo, true);
       A.simReq = sim[0] && sim[0].dados && !sim[0].dados.feito ? sim[0].dados : null;
       // temas narrados: grátis + comprados + o que os pais ativaram
       Promise.all([DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'temas' } }).catch(() => []), DB.sel('compras', { eq: { familia_id: A.fam.id } }).catch(() => []), DB.sel('temas', {}).catch(() => [])]).then(([tp, cp, td]) => { A.temasCfg = (tp[0] && tp[0].dados) || null; A.compras = cp.map(x => x.item); A.temasDB = td; }).catch(() => {});
@@ -409,7 +426,13 @@
         <div class="flex-1 min-w-0"><div class="flex items-center gap-1.5">${I('stars', 'text-secondary text-[16px]', 1)}<span class="text-label-sm text-secondary uppercase tracking-wider">${L('Aventura do dia', "Today's adventure")}</span></div>
         <h3 class="text-label-lg text-on-surface truncate">${esc(next.title)}</h3>
         <p class="text-body-sm text-on-surface-variant line-clamp-1">${next.kind === 'ai' ? L('Feita com a matéria da sua escola ✨', 'Made from your school material ✨') : L('Leitura, palavras novas e desafios', 'Reading, new words and challenges')}</p></div></div>` : '';
+    // modo de estudo: faixa clara para a criança saber o que está fazendo hoje
+    const pv = e.provas(), pv1 = pv[0], diasProva = pv1 && pv1.data_prova ? Math.round((new Date(pv1.data_prova + 'T12:00') - new Date(today() + 'T12:00')) / 864e5) : null;
+    const modoBar = e.modo === 'prova' && pv1 ? `<div class="rounded-2xl p-4 bg-tertiary-container/25 border-2 border-tertiary-container flex items-center gap-3"><span class="text-[30px]">📝</span><span class="flex-1"><b class="text-label-lg text-on-surface block">${L('Modo prova', 'Test mode')}${diasProva !== null ? ' · ' + (diasProva <= 0 ? L('a prova é hoje!', 'the test is today!') : diasProva === 1 ? L('prova amanhã', 'test tomorrow') : L(`prova em ${diasProva} dias`, `test in ${diasProva} days`)) : ''}</b><span class="text-body-sm text-on-surface-variant">${L('Revisando para a prova', 'Reviewing for the test')}: ${esc(pv.map(l => l.titulo || l.title).filter(Boolean).join(', ').slice(0, 80))}</span></span></div>`
+      : e.modo === 'ferias' ? `<div class="rounded-2xl p-4 bg-secondary-container/25 border-2 border-secondary-container flex items-center gap-3"><span class="text-[30px]">🏖️</span><span class="flex-1"><b class="text-label-lg text-on-surface block">${L('Modo férias', 'Holiday mode')}</b><span class="text-body-sm text-on-surface-variant">${L('Histórias narradas com palavras novas', 'Narrated stories with new words')}</span></span></div>` : '';
     const cta = !canPlay ? `<div class="bg-secondary-fixed text-on-secondary-fixed rounded-2xl p-4 text-label-lg">${kt('planoVencido')}</div>`
+      : A.simReq ? `${btnPrimary('simgo2', L('Começar o simulado', 'Start the practice test'), '<span class="text-[26px]">📝</span>', 'h-16')}<p class="text-body-sm text-on-surface-variant text-center mt-2">${L('Seus pais prepararam um simulado. Depois dele, a lição de hoje continua.', 'Your parents set up a practice test. After it, today\'s lesson continues.')}</p>`
+      : e.modo === 'ferias' && temasKid().length && !done ? `${btnPrimary('ferias', L('Ouvir a próxima história', 'Listen to the next story'), '<span class="text-[26px]">🎧</span>', 'h-16')}<div class="h-3"></div>${btnSoft('go', L('Fazer a lição normal', 'Do the regular lesson'), 'menu_book')}`
       : !hasAny ? `<div class="bg-surface-container-low rounded-2xl p-4 text-label-lg text-on-surface flex gap-3 items-center">${I('photo_camera', 'text-primary text-[28px]')}<span>${kt('semConteudo')}</span></div>`
       : done ? `${btnPrimary('mais', kt('praticarMais').replace('🔁 ', ''), `<span class="material-symbols-outlined text-[28px] fill">replay</span>`)}${next ? `<div class="h-3"></div>${btnSoft('go', `${kt('comecar')}: ${esc(next.title).slice(0, 40)}`, 'menu_book')}` : ''}`
       : btnPrimary('go', mins ? kt('continuarLicao') : kt('comecar'), `<span class="material-symbols-outlined text-[28px] fill">play_arrow</span>`, 'h-16');
@@ -418,7 +441,8 @@
         <div class="space-y-5">${greet}${ring}</div>
         <div class="space-y-5 lg:pt-24">
           <div class="grid grid-cols-3 gap-2.5">${pillar('leitura', 'menu_book', 'bg-tertiary-container/15', 'text-tertiary', 'bg-tertiary-container')}${pillar('palavras', 'spellcheck', 'bg-secondary-container/20', 'text-secondary', 'bg-secondary-container')}${pillar('reforco', 'auto_stories', 'bg-primary-container/15', 'text-primary', 'bg-primary-container')}</div>
-          ${A.simReq ? `<button id="simgo" class="w-full text-left bg-tertiary-fixed text-on-tertiary-fixed rounded-2xl p-4 flex items-center gap-3 shadow-sm"><span class="text-[30px]">📝</span><span class="flex-1"><b class="text-label-lg block">${L('Simulado dos seus pais', 'Practice test from your parents')}</b><span class="text-body-sm">${A.simReq.n} ${L('perguntas', 'questions')}${A.simReq.tempo ? ` · ${A.simReq.tempo} min` : ''}</span></span>${I('chevron_right', 'text-[24px]')}</button>` : ''}
+          ${modoBar}
+          ${A.simReq && false ? `<button id="simgo" class="w-full text-left bg-tertiary-fixed text-on-tertiary-fixed rounded-2xl p-4 flex items-center gap-3 shadow-sm"><span class="text-[30px]">📝</span><span class="flex-1"><b class="text-label-lg block">${L('Simulado dos seus pais', 'Practice test from your parents')}</b><span class="text-body-sm">${A.simReq.n} ${L('perguntas', 'questions')}${A.simReq.tempo ? ` · ${A.simReq.tempo} min` : ''}</span></span>${I('chevron_right', 'text-[24px]')}</button>` : ''}
           ${adv}
           <div class="pt-1 space-y-3">${cta}
             <div class="flex items-center justify-center gap-1.5 text-center px-4 py-1"><span class="text-body-sm text-on-surface-variant">${done ? L(`Sequência de <strong class="text-on-surface">${p.streak || 0} ${(p.streak || 0) === 1 ? 'dia' : 'dias'}</strong>! Volte amanhã 🔥`, `<strong class="text-on-surface">${p.streak || 0}-day</strong> streak! Come back tomorrow 🔥`) : L(`Complete hoje para manter sua sequência de <strong class="text-on-surface">${p.streak || 0} ${(p.streak || 0) === 1 ? 'dia' : 'dias'}</strong>!`, `Finish today to keep your <strong class="text-on-surface">${p.streak || 0}-day</strong> streak!`)}</span><span>🌟</span></div>
@@ -427,7 +451,13 @@
     const go = $('#go'); if (go) go.onclick = () => runLesson({});
     const m = $('#mais'); if (m) m.onclick = () => runLesson({ more: true });
     const nb = $('#nota'); if (nb) nb.onclick = notaScreen;
-    const sg = $('#simgo'); if (sg) sg.onclick = () => runSim({ n: A.simReq.n, tempo: A.simReq.tempo, licoes: A.simReq.licoes, pais: true });
+    const sg = $('#simgo2'); if (sg) sg.onclick = () => runSim({ n: A.simReq.n, tempo: A.simReq.tempo, licoes: A.simReq.licoes, pais: true });
+    const fe = $('#ferias'); if (fe) fe.onclick = async () => {
+      if (!A.planOk()) return toast(kt('planoVencido'));
+      const done2 = A.eng.prog.completed;
+      for (const t of temasKid()) { const caps = await QKTemas.chapters(t); const c = caps.find(x => !done2[x.id]); if (c) return runLesson({ reading: A.eng.reading(c) }); }
+      toast(L('Você ouviu todas as histórias! 🎉 Peça para seus pais ativarem mais temas.', 'You heard all the stories! 🎉 Ask your parents to turn on more topics.'), 4500); library();
+    };
   }
   A.kidHome = kidHome;
 
@@ -492,7 +522,8 @@
   const fmtNota = n => n === null || n === undefined ? '—' : (Math.round(n * 10) / 10).toFixed(1).replace('.', isPt() ? ',' : '.');
   async function runSim(cfg) {
     if (!A.planOk()) return toast(kt('planoVencido'));
-    const e = A.eng; const S = e.startSession({ simulado: cfg });
+    const e = A.eng; cfg = Object.assign({}, cfg, { materias: (cfg.licoes && cfg.licoes.length ? (e._todas || e.licoes).filter(l => cfg.licoes.some(id => l.id === id || l.id === 'AI-' + id)) : e.licoes).map(l => l.titulo || l.title).filter(Boolean).slice(0, 6) });
+    const S = e.startSession({ simulado: cfg });
     if (!S.cap) { toast(L('Ainda não há perguntas para um simulado. Faça algumas lições primeiro!', 'No questions for a practice test yet. Do some lessons first!')); return kidHome(); }
     Ls = { t0: Date.now(), hidden: 0, hidAt: null, step: null, n: 0 };
     view(`<main class="min-h-[100dvh] flex flex-col items-center justify-center text-center px-margin max-w-md mx-auto gap-4"><div class="text-[64px]">📝</div>
@@ -500,9 +531,9 @@
       <p class="text-body-lg text-on-surface-variant">${S.cap} ${L('perguntas', 'questions')}${cfg.tempo ? ` · ${cfg.tempo} min` : ''}. ${L('Como numa prova: você só vê o resultado no final.', 'Like a real test: you see the result at the end.')}</p>
       <p class="text-body-sm text-on-surface-variant">${DISC_KID()}</p>
       <button id="bora" class="btn3d w-full h-14 rounded-2xl bg-primary-container text-on-primary text-headline-md">${L('Começar', 'Start')} 🚀</button>
-      <button id="nao" class="text-label-md text-on-surface-variant underline">${L('Agora não', 'Not now')}</button></main>`);
+      ${cfg.pais ? `<p class="text-body-md text-on-surface">${L('Seus pais prepararam este simulado para você. Sem dicas: leia com calma e faça o seu melhor! 💪', 'Your parents prepared this practice test for you. No hints: read calmly and do your best! 💪')}</p>` : `<button id="nao" class="text-label-md text-on-surface-variant underline">${L('Agora não', 'Not now')}</button>`}</main>`);
     $('#bora').onclick = () => { Ls.t0 = Date.now(); nextStep(); };
-    $('#nao').onclick = () => { e.s = null; Ls = null; kidHome(); };
+    const na = $('#nao'); if (na) na.onclick = () => { e.s = null; Ls = null; kidHome(); };
   }
   function simResult(S, r) {
     const e = A.eng, nota = r.total ? Math.round(100 * r.right / r.total) / 10 : 0, mins = Math.max(1, Math.round(S.sec / 60));
@@ -517,8 +548,8 @@
         <p class="text-body-md text-on-surface-variant">${r.right} ${L('de', 'of')} ${r.total} ${L('certas', 'right')} · ⏱️ ${mins} min${prev ? ` · ${L('antes', 'before')}: ${fmtNota(prev.nota)} ${nota > prev.nota ? '↑' : nota < prev.nota ? '↓' : '='}` : ''}</p>
         <p class="text-body-sm text-on-surface-variant mt-1">${DISC_KID()}</p></div>
       ${wrong.length ? `<section class="space-y-2"><h2 class="text-headline-md text-on-surface">${L('Para revisar', 'To review')}</h2>${wrong.map(q => `<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm"><p class="text-label-lg text-on-surface">${md(q.prompt)}</p><p class="text-body-md text-primary mt-1">✓ ${md(e.answerText(q))}</p>${q.explain ? `<p class="text-body-sm text-on-surface-variant mt-1">${md(q.explain)}</p>` : ''}</div>`).join('')}</section>` : ''}
-      ${btnPrimary('home', L('Voltar', 'Back'), `<span class="material-symbols-outlined text-[26px]">home</span>`)}</main>`);
-    $('#home').onclick = () => kidHome();
+      ${S.simulado && S.simulado.pais && !e.goalDone() ? btnPrimary('home', L('Continuar a lição de hoje', "Continue today's lesson"), `<span class="material-symbols-outlined text-[26px]">arrow_forward</span>`) : btnPrimary('home', L('Voltar', 'Back'), `<span class="material-symbols-outlined text-[26px]">home</span>`)}</main>`);
+    $('#home').onclick = () => (S.simulado && S.simulado.pais && !e.goalDone() ? runLesson({}) : kidHome());
   }
   function notaScreen() {
     const e = A.eng, p = e.prog, est = e.estimate(21);
@@ -613,6 +644,27 @@
   // palavras por fase: começando (caixa 1-2), desenvolvendo (3-4), dominadas (5-6)
   const wordPhases = p => { const ph = { comecando: [], desenvolvendo: [], dominadas: [] }; Object.entries(p.wordbank || {}).forEach(([w, x]) => { const b = (x && x.box) || 1; (b >= 5 ? ph.dominadas : b >= 3 ? ph.desenvolvendo : ph.comecando).push([w, x]); }); return ph; };
   A.wordPhases = wordPhases;
+  /* ---------- "Tem algo errado?": a pergunta sai na hora e a equipe recebe o aviso ---------- */
+  function reportar(q, motivo, auto) {
+    if (!q || QK.DEMO && auto) return;
+    const base = q.base || q.id, lic = (A.eng.licoes || []).find(l => (l.questions || []).some(x => x.id === base));
+    const row = { familia_id: A.fam && A.fam.id, crianca_id: A.kid && A.kid.id, licao_id: lic ? lic.id : null, pergunta_id: String(base).slice(0, 120), motivo: String(motivo).slice(0, 60), quem: auto ? 'auto' : 'crianca', pergunta: { prompt: q.prompt, options: q.options, answers: q.answers, type: q.type } };
+    DB.ins('reportes', row).catch(e => console.warn('reporte', e.message));
+  }
+  A.reportar = reportar;
+  function reportSheet(q) {
+    const motivos = [['texto', L('O texto está estranho', 'The text looks wrong')], ['resposta', L('A resposta certa está errada', 'The right answer is wrong')], ['entendi', L('Não entendi a pergunta', "I don't understand the question")], ['outro', L('Outro problema', 'Something else')]];
+    const sh = sheet(`<div class="space-y-3"><h2 class="text-headline-md text-on-surface">⚠️ ${L('O que está errado?', "What's wrong?")}</h2>
+      <p class="text-body-md text-on-surface-variant">${L('Escolha o motivo. A pergunta sai daqui e você continua, sem perder nada.', 'Pick a reason. The question goes away and you keep going without losing anything.')}</p>
+      ${motivos.map(([k, t2]) => `<button data-mot="${k}" class="w-full text-left h-14 px-4 rounded-2xl bg-surface-container-low text-label-lg text-on-surface active:scale-[0.98]">${t2}</button>`).join('')}</div>`);
+    sh.querySelectorAll('[data-mot]').forEach(b => b.onclick = () => {
+      reportar(q, b.dataset.mot, false);
+      const base = q.base || q.id; A.eng.prog.off = A.eng.prog.off || {}; A.eng.prog.off[base] = 1; A.saveProg();
+      sh.remove(); Ls.n = Math.max(0, Ls.n - 1);
+      toast('💙 ' + L('Obrigado! Você ajudou a melhorar o Quest Kids. Nossa equipe vai olhar essa pergunta.', 'Thank you! You helped make Quest Kids better. Our team will look at this question.'), 4500);
+      nextStep();
+    });
+  }
   function sheet(html) {
     const box = document.createElement('div');
     box.className = 'fixed inset-0 z-50 bg-black/45 flex items-end sm:items-center justify-center p-0 sm:p-4';
@@ -679,7 +731,7 @@
     // calendário: últimos 28 dias
     const cal = []; for (let i = 27; i >= 0; i--) { const d = addDays(today(), -i), x = p.dias[d] || {}; cal.push([d, x.seg ? ((x.seg / 60 >= goal) || ((x.q || 0) + (x.pg || 0)) >= e.goalSteps() ? 2 : 1) : 0]); }
     const cur = e.licoes.find(l => l.foco) || e.licoes.find(l => l.modo_prova) || e.licoes[0];
-    const sample = cur ? shuffle((cur.questions || []).filter(q => q.pilar !== 'leitura')).slice(0, 3).map(q => (q.vars ? e.question(e.variant(q)) : q)).filter(Boolean) : [];
+    const sample = cur ? shuffle((cur.questions || []).filter(q => q.pilar !== 'leitura')).slice(0, 3).map(q => (q.vars ? e.question(e.variant(q)) : q)).filter(q => q && !e.problema(q)) : [];
     view(`${kidHeader(kt('progresso'))}${pageMain(`
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-8 mt-2">
       <div class="space-y-5">
@@ -1055,6 +1107,7 @@
         ${q.hint ? (hint ? `<div class="flex items-center gap-3 p-3.5 mt-5 rounded-xl bg-surface-container-low shadow-sm"><div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center shrink-0 text-on-secondary-container">${I('lightbulb', 'text-[18px]')}</div><p class="text-body-sm text-on-surface-variant leading-snug">${md(q.hint)}</p></div>`
           : `<button id="hint" class="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-low text-label-md text-on-surface-variant">${I('lightbulb', 'text-[18px] text-secondary')} ${L('Ver dica', 'Show hint')}</button>`) : ''}
         <div id="fb"></div>
+        ${answered ? '' : `<button id="rep" type="button" class="mt-4 text-label-sm text-on-surface-variant underline decoration-dotted">⚠️ ${L('Tem algo errado nesta pergunta?', 'Something wrong with this question?')}</button>`}
         ${nearBottom(`<button id="ok" type="button" ${ready() ? '' : 'disabled'} class="btn3d w-full h-14 rounded-xl bg-primary-container text-on-primary text-headline-md flex items-center justify-center gap-2"><span>${kt('conferir')}</span>${I('arrow_forward', 'text-[22px]')}</button>`)}`, drawnQ); drawnQ = true;
       wireTop(); wire();
     };
@@ -1071,9 +1124,10 @@
       app().querySelectorAll('[data-b]').forEach(b => b.onclick = e => { const un = e.target.closest('[data-un]'); if (un) { delete placed[un.dataset.un]; draw(); return; } if (selTile !== null) { placed[selTile] = b.dataset.b; selTile = null; draw(); } });
       const u = $('#undo'); if (u) u.onclick = () => { picked.pop(); draw(); };
       const h = $('#hint'); if (h) h.onclick = () => { hint = true; draw(); };
+      const rp = $('#rep'); if (rp) rp.onclick = () => { if (!answered) reportSheet(q); };
       $('#ok').onclick = submit;
     };
-    const submit = () => {
+    const submit = () => { const rp0 = $("#rep"); if (rp0) rp0.remove();
       answered = true; tickStep('q');
       const a = q.type === 'order' ? picked.map(i => q.items[i]) : q.type === 'sort' ? q.items.map((x, i) => placed[i]) : ans;
       const r = A.eng.record(step, a, { hint });
@@ -1186,7 +1240,7 @@
       });
     } catch (e) {}
   }
-  A.sfx = sfx;
+  A.sfx = sfx; A.cheer = (c, q) => cheer(c, q);
   A._steps = { match: st => { Ls = Ls || { t0: Date.now(), hidden: 0, step: st, n: 1 }; Ls.step = st; matchStep(st); } };
   // acertou: som + confete pequeno + moedinhas subindo (curto, sem exagero)
   function cheer(coins, quiet) {

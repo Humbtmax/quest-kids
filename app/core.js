@@ -16,7 +16,7 @@
       assinaturas: [{ familia_id: f, plano: 'teste', status: 'trialing', com_ia: true, valido_ate: new Date(Date.now() + 7 * 864e5).toISOString() }],
       criancas: [{ id: k, familia_id: f, apelido: 'Gabi', avatar: '🦄', idade: 10, serie: '5th grade', idioma_app: 'en', idiomas: ['en', 'pt-BR'], estilo: 'rosa', tema: 'claro', minutos: 20, pacote: 'gabi-en5', dias: [1, 2, 3, 4, 5], pilares: { leitura: 40, palavras: 25, reforco: 35 }, criado_em: iso(10) }],
       progresso: [], convites: [], pins: [], senha_pais: '2026',
-      licoes: [{ id: 'AIdemo1', crianca_id: k, pilar: 'misto', idioma: 'en', titulo: 'Family Budget Boss', pausada: false, foco: false, criado_em: iso(1), conteudo: {
+      licoes: [{ id: 'AIdemo1', crianca_id: k, pilar: 'misto', idioma: 'en', titulo: 'Family Budget Boss', pausada: false, foco: false, criado_em: iso(1), conteudo: { modo_prova: true, data_prova: iso(-3).slice(0, 10),
         titulo: 'Family Budget Boss', icone: '💵', modo_prova: true, data_prova: iso(-3).slice(0, 10),
         passage: { title: 'Where does the money go?', text: 'Every month a family gets [[income|the money that comes in, like a paycheck]]. Then they pay [[expenses|the things money is spent on, like rent and food]].\n\nA [[budget|a plan that says where each dollar will go]] helps the family decide before the month starts. In a zero-based budget, every dollar gets a job, so income minus planned spending equals zero.\n\nSmart families also keep an [[emergency fund|money saved for surprises, like a broken car]].' },
         defs_alt: { income: ['what you earn', 'money you receive'], expenses: ['what you spend', 'costs you pay'], budget: ['a money plan', 'a spending plan'], 'emergency fund': ['savings for surprises', 'a rainy-day fund'] },
@@ -210,11 +210,18 @@
     upd: (t, f, patch) => rest('PATCH', `${t}?${qs(f)}`, patch, 'return=representation'),
     del: (t, f) => rest('DELETE', `${t}?${qs(f)}`),
     rpc: (fn, args) => rest('POST', 'rpc/' + fn, args || {}),
-    async upload(bucket, path, blob) {
+    async upload(bucket, path, blob, onProgress) {
       await fresh();
-      const r = await fetch(`${C.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, { method: 'POST', headers: Object.assign(H(), { 'Content-Type': blob.type || 'application/octet-stream', 'x-upsert': 'true' }), body: blob });
-      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.message || 'Falha no envio'); }
-      return path;
+      // XHR para mostrar a barra de progresso do envio (fetch não informa o progresso)
+      return new Promise((res, rej) => {
+        const x = new XMLHttpRequest();
+        x.open('POST', `${C.SUPABASE_URL}/storage/v1/object/${bucket}/${path}`);
+        const h = Object.assign(H(), { 'Content-Type': blob.type || 'application/octet-stream', 'x-upsert': 'true' }); Object.keys(h).forEach(k => x.setRequestHeader(k, h[k]));
+        if (onProgress && x.upload) x.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+        x.onload = () => { if (x.status >= 200 && x.status < 300) { onProgress && onProgress(1); res(path); } else { let m = 'Falha no envio'; try { m = JSON.parse(x.responseText).message || m; } catch (e) {} rej(new Error(m)); } };
+        x.onerror = () => rej(new Error('rede')); x.ontimeout = () => rej(new Error('rede')); x.timeout = 120000;
+        x.send(blob);
+      });
     },
     async signed(bucket, path, sec) {
       await fresh();
@@ -289,6 +296,12 @@
       if (fn === 'sou_admin') return true;
       if (fn === 'admin_contas') return [{ id: 'demo-fam', criado_em: new Date().toISOString(), emails: 'demo@questkids (esta demonstração)', criancas: '🦊 Gabi, 🐱 Bia', licoes: 3, sessoes: 5, plano: 'teste · trialing', minha: true }, { id: 'demo-2', criado_em: new Date(Date.now() - 864e5 * 3).toISOString(), emails: 'exemplo3@demo', criancas: '🐼 Leo', licoes: 1, sessoes: 2, plano: 'anual · active', minha: false }];
       if (fn === 'minha_familia_nova') return 'demo-fam';
+      if (fn === 'definir_pais') { const d = dload(); (d.familias || []).forEach(f => { f.pais = a && a.p; }); dsave(d); return null; }
+      if (fn === 'gerir_pergunta') { const d = dload(); (d.licoes || []).forEach(l => { if (l.id === a.licao) (l.conteudo.questions || []).forEach(q => { if (q.id === a.pergunta) q.off = !a.ativa; }); }); dsave(d); return null; }
+      if (fn === 'admin_reportes') return (dload().reportes || []).filter(r => r.status !== 'resolvido').map((r, i) => Object.assign({ id: r.id || i + 1, criado_em: r.criado_em || new Date().toISOString(), vezes: 1 }, r)).concat([{ id: 900, criado_em: new Date().toISOString(), quem: 'auto', motivo: 'auto:sobrou_variavel', vezes: 2, licao: 'Spiders, Boxes, and Matter!', pergunta: { prompt: '(exemplo) Block A is {L1} in long…' } }]);
+      if (fn === 'admin_resolver_reporte') return null;
+      if (fn === 'gerir_prova') { const d = dload(); (d.licoes || []).forEach(l => { if (l.id === a.licao) Object.assign(l.conteudo, { modo_prova: !!a.ligado, data_prova: a.ligado ? a.data_prova : null }); }); dsave(d); return null; }
+      if (fn === 'admin_custos') return [{ feito_em: new Date().toISOString(), email: 'exemplo1@demo', paginas: 2, perguntas: 15, removidas: 1, tok_in: 9800, tok_out: 6100, usd: 0.081 }, { feito_em: new Date(Date.now() - 864e5).toISOString(), email: 'exemplo2@demo', paginas: 5, perguntas: 16, removidas: 0, tok_in: 21000, tok_out: 6900, usd: 0.111 }];
       if (fn === 'meu_painel_afiliado') return { afiliado: db.afiliado || null, indicados: db.afiliado ? 3 : 0, assinantes: db.afiliado ? 1 : 0, a_pagar: db.afiliado ? 1197 : 0, pago: 0, config: { pote: 30, max_desconto: 20, meses: 12 } };
       if (fn === 'salvar_afiliado') { const d = Math.max(0, Math.min(20, +a.desconto || 0)); db.afiliado = { codigo: String(a.cod).toUpperCase(), nome: a.nome_pub, desconto_pct: d, comissao_pct: 30 - d, pix: a.chave_pix }; dsave(db); return db.afiliado; }
       if (fn === 'admin_painel') return { familias: 42, novas7: 6, novas30: 19, por_status: { active: 17, trialing: 21, canceled: 4 }, por_plano: { 'anual*-brl': 9, 'semestral-brl': 3, 'mensal-brl': 4, 'anual-usd': 1 }, cancel30: 2, criancas: 55, ativas7: 38, sessoes7: 214, minutos7: 3120, licoes30: 61, ia_mes: { custo_centavos: 1840, paginas: 233, familias: 29 }, ia_top: [{ familia_id: 'x', email: 'exemplo1@demo', custo_centavos: 410, paginas: 41 }, { familia_id: 'y', email: 'exemplo2@demo', custo_centavos: 190, paginas: 22 }], tarefas: { pronto: 58, erro: 2, sem_limite: 1 }, erros: [{ criado_em: new Date().toISOString(), erro: 'nenhum arquivo legível (use JPG, PNG ou PDF)' }], comissoes: [{ id: 1, codigo: 'ANA10', pix: 'ana@pix', valor_centavos: 1197, moeda: 'brl', criado_em: new Date().toISOString() }], afiliados: [{ codigo: 'ANA10', nome: 'Ana', desconto_pct: 10, comissao_pct: 20, indicados: 5 }], feedbacks: [{ materia: 'Frações', nota: 9.5, comentario: '(exemplo de demonstração) Tirou a melhor nota da turma!', autoriza_depoimento: true, criado_em: new Date().toISOString() }] };
@@ -304,7 +317,8 @@
       if (fn === 'aceitar_convite') throw new Error('No modo demo não há convites.');
       return null;
     },
-    async upload(bucket, path, blob) {
+    async upload(bucket, path, blob, onProgress) {
+      if (onProgress) for (let k = 1; k <= 4; k++) { await new Promise(r => setTimeout(r, 120)); onProgress(k / 4); }
       const db = demoSeed(dload()); db._files = db._files || {};
       if (blob.size < 400000) db._files[bucket + '/' + path] = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
       dsave(db); return path;
