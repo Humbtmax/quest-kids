@@ -59,5 +59,10 @@
     if (tema.db) return (tema.db.conteudo.chapters || []).map((c, i) => ({ id: `T-${tema.id}-C${i + 1}`, kind: 'module', tema: true, icon: tema.icon, title: `${tema.titulo || tema.pt} · ${i + 1}: ${c.title}`, chapterTitle: c.title, moduleTitle: tema.titulo || tema.pt, audio: c.audio, image: c.image, minutes: c.minutes, text: c.text || '', pages: [c.text || ''], aloud: [], checks: [], questions: c.questions || [] }));
     const plan = await loadMods(); return plan.filter(x => x.module === tema.mod);
   }
-  window.QKTemas = { CAT, chapters, loadMods };
+  // o que a família pode usar: grátis, comprado avulso, ou com o Pacote Férias (até PACK_MAX temas à escolha entre os do pacote e os extras)
+  const PACK_MAX = 10;
+  const liberado = (t, own) => t.status === 'pronto' && (t.pacote === 'gratis' || own.includes(t.id) || own.includes(t.pacote) || (own.includes('ferias1') && (t.pacote === 'ferias1' || t.pacote === 'extra')));
+  // faixa de idade do áudio para a criança (6–9 ou 10–14) e se aquela versão já existe
+  const faixaDe = idade => (idade && idade <= 9) ? '6-9' : '10-14';
+  window.QKTemas = { CAT, chapters, loadMods, liberado, faixaDe, PACK_MAX };
 })();

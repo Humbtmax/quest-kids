@@ -101,7 +101,9 @@
   /* ================= família ================= */
   async function loadFamily() {
     const uidv = Auth.user && Auth.user.id;
-    const mem = await DB.sel('membros', { eq: { user_id: uidv } });
+    let mem = await DB.sel('membros', { eq: { user_id: uidv } });
+    // conta apagada no painel, mas o login ficou (ex.: administrador): ganha uma família nova e começa do cadastro
+    if (!mem.length) { await DB.rpc('minha_familia_nova').catch(() => null); mem = await DB.sel('membros', { eq: { user_id: uidv } }); }
     if (!mem.length) throw new Error(P('Sua conta ainda não tem família. Saia e entre de novo; se continuar, fale com o suporte.', 'Your account has no family yet. Sign out and in again.'));
     let m = mem.find(x => x.papel === 'dono') || mem[0];
     if (mem.length > 1) {
@@ -423,7 +425,7 @@
   function temasKid() {
     if (!window.QKTemas) return [];
     const own = A.compras || [], cfg = A.temasCfg, db = (A.temasDB || []).map(t => ({ id: 'DB-' + t.id, icon: t.icone || '🎧', pt: t.titulo, en: t.titulo, pacote: t.pacote || 'gratis', status: 'pronto', idiomas: [t.idioma], db: t }));
-    return QKTemas.CAT.concat(db).filter(t => t.status === 'pronto' && (t.pacote === 'gratis' || own.includes(t.pacote) || own.includes(t.id)) && (cfg && cfg.ativos ? cfg.ativos.includes(t.id) : t.pacote === 'gratis'));
+    return QKTemas.CAT.concat(db).filter(t => QKTemas.liberado(t, own) && (cfg && cfg.ativos ? cfg.ativos.includes(t.id) : t.pacote === 'gratis'));
   }
   async function temaScreen(t) {
     if (!t) return;
@@ -431,7 +433,7 @@
     const caps = await QKTemas.chapters(t); const done = A.eng.prog.completed;
     view(`${kidHeader(L('Temas', 'Topics'))}${pageMain(`<div class="max-w-xl mx-auto mt-2 space-y-4">
       <button id="bk" class="inline-flex items-center gap-1 text-label-md text-primary">${I('arrow_back', 'text-[20px]')} ${kt('biblioteca')}</button>
-      <div class="text-center"><div class="text-[60px]">${t.icon}</div><h1 class="text-headline-lg-mobile text-on-surface">${esc(isPt() ? t.pt : t.en)}</h1><p class="text-body-sm text-on-surface-variant">${caps.length} ${L('capítulos narrados', 'narrated chapters')}</p></div>
+      <div class="text-center"><div class="text-[60px]">${t.icon}</div><h1 class="text-headline-lg-mobile text-on-surface">${esc(isPt() ? t.pt : t.en)}</h1><p class="text-body-sm text-on-surface-variant">${caps.length} ${L('capítulos narrados', 'narrated chapters')}</p>${(() => { const f = QKTemas.faixaDe(A.kid && A.kid.idade), tem = (t.faixas || ['10-14']).includes(f); return `<p class="mt-1 inline-block text-label-sm px-3 py-1 rounded-full bg-surface-container text-on-surface-variant">🎧 ${tem ? L(`Versão ${f.replace('-', ' a ')} anos`, `Ages ${f.replace('-', '–')} version`) : L(`A versão ${f.replace('-', ' a ')} anos vem em breve. Por enquanto: 10 a 14 anos.`, `Ages ${f.replace('-', '–')} version coming soon. For now: ages 10–14.`)}</p>`; })()}</div>
       ${caps.map((c, i) => `<button data-cap="${i}" class="w-full text-left bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex items-center gap-3"><span class="w-10 h-10 rounded-full ${done[c.id] ? 'bg-primary-container text-on-primary' : 'bg-surface-container'} flex items-center justify-center text-label-lg">${done[c.id] ? '✓' : i + 1}</span><span class="flex-1"><b class="text-label-lg text-on-surface block">${esc(c.chapterTitle || c.title)}</b><span class="text-body-sm text-on-surface-variant">🎧 ${c.minutes || 5} min</span></span>${I('play_circle', 'text-[30px] text-primary', 1)}</button>`).join('') || `<p class="text-body-md text-on-surface-variant">${L('Em breve!', 'Coming soon!')}</p>`}
     </div>`)}${kidNav('bib')}`);
     wireNav(); $('#bk').onclick = () => library();
@@ -463,12 +465,13 @@
       ${temasKid().length ? `<section class="mt-7"><h2 class="text-headline-lg-mobile text-on-surface">🎧 ${L('Temas narrados', 'Narrated topics')}</h2><p class="text-body-sm text-on-surface-variant mb-3">${L('Ouça a história, aprenda palavras novas e responda às perguntas.', 'Listen to the story, learn new words and answer the questions.')}</p>
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">${temasKid().map(t => `<button data-tema="${esc(t.id)}" class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm text-left active:scale-95 transition"><div class="text-[36px]">${t.icon}</div><b class="text-label-lg text-on-surface line-clamp-2 mt-1">${esc(isPt() ? t.pt : t.en)}</b>${(t.idiomas || []).length === 1 && t.idiomas[0] === 'en' ? '<span class="text-label-sm text-on-surface-variant">🇺🇸 English</span>' : ''}</button>`).join('')}</div></section>` : ''}
       <section class="mt-7"><h2 class="text-headline-lg-mobile text-on-surface mb-3">${kt('minhasPalavras')} <span class="text-label-md text-on-surface-variant">(${words.length})</span></h2>
-        ${words.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">${words.map(([w, x]) => `<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm"><div class="flex items-center justify-between gap-2"><b class="text-label-lg text-on-surface">${esc(w)}</b><span class="flex gap-0.5">${[1, 2, 3, 4, 5, 6].map(i => `<span class="w-1.5 h-1.5 rounded-full ${i <= (x.box || 1) ? 'bg-primary-container' : 'bg-surface-container-high'}"></span>`).join('')}</span></div><p class="text-body-sm text-on-surface-variant mt-1">${esc(e.defs[w] || x.def || '')}</p></div>`).join('')}</div>`
+        ${words.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">${words.map(([w, x]) => `<div data-word="${esc(w)}" role="button" tabindex="0" class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm cursor-pointer active:scale-[0.98] transition"><div class="flex items-center justify-between gap-2"><b class="text-label-lg text-on-surface">${esc(w)}</b><span class="flex gap-0.5">${[1, 2, 3, 4, 5, 6].map(i => `<span class="w-1.5 h-1.5 rounded-full ${i <= (x.box || 1) ? 'bg-primary-container' : 'bg-surface-container-high'}"></span>`).join('')}</span></div><p class="text-body-sm text-on-surface-variant mt-1">${esc(e.defs[w] || x.def || '')}</p></div>`).join('')}</div>`
         : `<p class="text-body-md text-on-surface-variant bg-surface-container-low rounded-2xl p-4">${kt('semPalavras')}</p>`}</section>`)}${kidNav('bib')}`);
     wireNav();
     const bs = $('#busca'); bs.onchange = () => library(bs.value); bs.onkeydown = ev => { if (ev.key === 'Enter') library(bs.value); };
     const ler = $('#ler'); if (ler) ler.onclick = () => runLesson({});
     app().querySelectorAll('[data-tema]').forEach(b => b.onclick = () => temaScreen(temasKid().find(t => t.id === b.dataset.tema)));
+    app().querySelectorAll('[data-word]').forEach(b => b.onclick = () => wordSheet(b.dataset.word));
     app().querySelectorAll('[data-r]').forEach(b => b.onclick = () => { if (!A.planOk()) return toast(kt('planoVencido')); const it = e.readingList().find(x => x.id === b.dataset.r); runLesson({ reading: e.reading(it), redo: true }); });
   }
 
@@ -606,6 +609,51 @@
     document.body.appendChild(box); box.onclick = e => { if (e.target === box || e.target.closest('[data-close]')) box.remove(); };
     return box;
   }
+  /* ---------- palavra: toca e abre o "dicionário" (inglês: dicionário de verdade; português: versão maior) ---------- */
+  const dictCache = {};
+  function frasesDoMaterial(w) {
+    const e = A.eng, lw = w.toLowerCase(), out = [];
+    const textos = [];
+    (e.licoes || []).forEach(l => (l.pages || [l.passage && l.passage.text]).forEach(t => t && textos.push(t)));
+    (e.plan || window.PLAN || []).forEach(it => (it.pages || []).forEach(t => t && textos.push(t)));
+    const re = new RegExp('(^|[^\\p{L}])' + lw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^\\p{L}]|$)', 'iu');
+    for (const t of textos) {
+      const limpo = String(t).replace(/\[\[([^|\]]+)\|[^\]]+\]\]/g, '$1');
+      for (const f of limpo.split(/(?<=[.!?])\s+|\n+/)) { if (re.test(f) && f.length < 260 && !out.includes(f.trim())) out.push(f.trim()); if (out.length >= 2) return out; }
+    }
+    return out;
+  }
+  async function dicionario(w) {
+    if (isPt() || / /.test(w)) return null;
+    if (w in dictCache) return dictCache[w];
+    try {
+      const ctl = new AbortController(); setTimeout(() => ctl.abort(), 5000);
+      const r = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(w), { signal: ctl.signal });
+      if (!r.ok) return (dictCache[w] = null);
+      const j = await r.json(); const m = []; let ex = '';
+      (j[0].meanings || []).forEach(mm => { (mm.definitions || []).slice(0, 2).forEach(d => { if (m.length < 3) m.push([mm.partOfSpeech, d.definition]); if (!ex && d.example) ex = d.example; }); });
+      return (dictCache[w] = m.length ? { m, ex } : null);
+    } catch (x) { return null; }
+  }
+  async function wordSheet(w) {
+    const e = A.eng, x = e.prog.wordbank[w] || {}, def = e.defs[w] || x.def || '', alts = (e.defAlts || {})[w] || [];
+    const box = x.box || 1, fase = box >= 5 ? ['🏆', L('Dominada', 'Mastered')] : box >= 3 ? ['💪', L('Em treino', 'Practicing')] : ['🌱', L('Começando', 'Starting')];
+    const frases = frasesDoMaterial(w);
+    const hl = f => esc(f).replace(new RegExp('(' + w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig'), '<mark class="bg-primary-fixed/60 text-on-surface rounded px-0.5">$1</mark>');
+    const sh = sheet(`<div class="space-y-4">
+      <div class="flex items-center gap-3"><h2 class="text-headline-xl-mobile text-on-surface break-words flex-1">${esc(w)}</h2>
+        <button id="wsay" class="w-12 h-12 rounded-full bg-primary-container text-on-primary flex items-center justify-center shrink-0" aria-label="${L('Ouvir', 'Listen')}">${I('volume_up', 'text-[26px]')}</button></div>
+      <div class="flex items-center gap-2"><span class="px-3 py-1 rounded-full bg-surface-container text-label-md text-on-surface">${fase[0]} ${fase[1]}</span><span class="flex gap-1">${[1, 2, 3, 4, 5, 6].map(i => `<span class="w-2.5 h-2.5 rounded-full ${i <= box ? 'bg-primary-container' : 'bg-surface-container-high'}"></span>`).join('')}</span></div>
+      ${def ? `<div class="bg-primary-fixed/25 rounded-2xl p-4"><p class="text-label-sm text-on-surface-variant uppercase mb-1">${L('O que quer dizer', 'What it means')}</p><p class="text-headline-md text-on-surface leading-snug">${esc(def)}</p></div>` : ''}
+      <div id="wdict"></div>
+      ${alts.length ? `<div class="bg-surface-container-low rounded-2xl p-4"><p class="text-label-sm text-on-surface-variant uppercase mb-1">${L('Outro jeito de explicar', 'Another way to say it')}</p>${alts.map(a => `<p class="text-body-lg text-on-surface">• ${esc(a)}</p>`).join('')}</div>` : ''}
+      ${frases.length ? `<div class="bg-surface-container-low rounded-2xl p-4"><p class="text-label-sm text-on-surface-variant uppercase mb-1">${L('Onde você viu', 'Where you saw it')}</p>${frases.map(f => `<p class="text-body-lg text-on-surface">“${hl(f)}”</p>`).join('')}</div>` : ''}
+      <p class="text-body-sm text-on-surface-variant">${L('Cada bolinha é um acerto em dias diferentes. Com 5, a palavra está dominada!', 'Each dot is a right answer on a different day. At 5, the word is mastered!')}</p></div>`);
+    sh.querySelector('#wsay').onclick = ev => speak(w + '. ' + (def || ''), ev.currentTarget);
+    const d = await dicionario(w); const slot = sh.querySelector('#wdict');
+    if (d && slot && slot.isConnected) slot.innerHTML = `<div class="border-2 border-surface-container-high rounded-2xl p-4"><p class="text-label-sm text-on-surface-variant uppercase mb-1">📕 ${L('No dicionário', 'In the dictionary')}</p>${d.m.map(([pos, t]) => `<p class="text-body-md text-on-surface"><i class="text-on-surface-variant">${esc(pos || '')}</i> ${esc(t)}</p>`).join('')}${d.ex ? `<p class="text-body-md text-on-surface-variant mt-1">${L('Exemplo', 'Example')}: “${esc(d.ex)}”</p>` : ''}</div>`;
+  }
+  A.wordSheet = wordSheet;
   function progress() {
     const e = A.eng, p = e.prog, goal = e.goalMin(); const days = [];
     for (let i = 6; i >= 0; i--) { const d = addDays(today(), -i); days.push([d, Math.round(((p.dias[d] || {}).seg || 0) / 60)]); }

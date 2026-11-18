@@ -32,7 +32,38 @@
       <path d="M18 92 q-8 6-4 14 q10-2 14-10z" fill="#14a3a3"/><path d="M102 92 q8 6 4 14 q-10-2-14-10z" fill="#14a3a3"/>
     </svg>`;
   }
-  const bubble = (txt, mood) => `<div class="flex items-end gap-3 mb-6">${mascot(84, mood)}<div class="relative bg-surface-container-lowest border-2 border-surface-container-high rounded-2xl rounded-bl-md px-4 py-3 text-headline-md text-on-surface soft-shadow">${txt}</div></div>`;
+  // Quico "conversa": as mensagens aparecem uma por uma, com "digitando…" antes (só na 1ª vez que a tela aparece)
+  const vistos = new Set();
+  const bubble = (txt, mood) => {
+    const msgs = [].concat(txt);
+    return `<div class="qk-chat flex items-start gap-2.5 mb-5" data-msgs="${esc(JSON.stringify(msgs))}">${mood === 'none' ? '' : mascot(52, mood)}<div class="qk-msgs flex-1 min-w-0 space-y-2 pt-1">${msgs.map((m, k) => `<div class="qk-m w-fit max-w-full bg-surface-container-lowest border-2 border-surface-container-high rounded-2xl ${k ? '' : 'rounded-tl-md'} px-4 py-2.5 ${k === msgs.length - 1 ? 'text-headline-md' : 'text-body-lg'} text-on-surface soft-shadow">${m}</div>`).join('')}</div></div>`;
+  };
+  let chatTimer = null;
+  function animarConversa() {
+    clearTimeout(chatTimer);
+    const c = app().querySelector('.qk-chat'); if (!c) return;
+    const key = c.dataset.msgs; const ms = Array.from(c.querySelectorAll('.qk-m'));
+    // tudo que vem depois da conversa espera ela terminar
+    const depois = []; let el = c.nextElementSibling; while (el) { depois.push(el); el = el.nextElementSibling; }
+    const ft = app().querySelector('footer'); if (ft) depois.push(ft);
+    const reduz = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (vistos.has(key) || reduz || !ms.length) { vistos.add(key); return; }
+    vistos.add(key);
+    depois.forEach(x => x.classList.add('qk-hold'));
+    ms.forEach(m => { m.dataset.html = m.innerHTML; m.style.display = 'none'; });
+    const box = c.querySelector('.qk-msgs');
+    const typing = document.createElement('div'); typing.className = 'w-fit bg-surface-container-lowest border-2 border-surface-container-high rounded-2xl px-4 py-3'; typing.innerHTML = '<span class="qk-typing" aria-label="digitando"><i></i><i></i><i></i></span>';
+    let k = 0;
+    const fim = () => { clearTimeout(chatTimer); typing.remove(); ms.forEach(m => { m.style.display = ''; }); depois.forEach(x => { x.classList.remove('qk-hold'); x.classList.add('qk-show'); }); c.onclick = null; };
+    const passo = () => {
+      if (k >= ms.length || !c.isConnected) return fim();
+      box.appendChild(typing);
+      const txt = ms[k].textContent || ''; const espera = Math.min(1300, 450 + txt.length * 14);
+      chatTimer = setTimeout(() => { typing.remove(); ms[k].style.display = ''; ms[k].classList.add('qk-msg'); box.appendChild(ms[k]); k++; chatTimer = setTimeout(passo, k >= ms.length ? 150 : 250); }, espera);
+    };
+    c.onclick = fim; // tocar na conversa pula a animação
+    passo();
+  }
 
   /* ---------- moldura: barra de progresso no topo, botão grande embaixo ---------- */
   function frame({ step, total, back, body, btn, btnOff, foot, inlineBtn }) {
@@ -49,6 +80,7 @@
     </div>`;
     window.scrollTo(0, 0);
     const bk = $('#bk'); if (bk && back) bk.onclick = back;
+    animarConversa();
   }
   const bigCard = (attr, val, on, inner, extra) => `<button ${attr}="${val}" class="w-full text-left rounded-2xl border-2 px-4 py-3.5 flex items-center gap-3 transition active:scale-[0.99] ${on ? 'border-primary-container bg-primary-fixed/30' : 'border-surface-container-high bg-surface-container-lowest'} ${extra || ''}">${inner}</button>`;
 
@@ -122,26 +154,72 @@
     $('#nx').onclick = async () => { $('#nx').disabled = true; await aceitar(); then(); };
   }
 
+  /* ---------- depoimentos de EXEMPLO (nomes fictícios, marcados como ilustrativos) ---------- */
+  const DEPO = () => pt() ? [
+    ['Carla', 'mãe da Laura, 9 anos', '🦄', 'Antes era briga para estudar. Agora são 15 minutinhos depois do lanche e ela mesma me mostra o cartão “FEITO”.'],
+    ['Rafael', 'pai do Theo, 10 anos', '🦖', 'Mando as fotos da matéria no domingo e durante a semana ele treina exatamente o que vai cair na prova.'],
+    ['Juliana', 'mãe da Sofia e do Pedro', '🐼', 'Cada um tem o seu PIN e o seu ritmo. Eu vejo no resumo quem precisa de mais ajuda em quê.'],
+    ['Marcos', 'pai da Helena, 8 anos', '🐬', 'Ela adora as histórias narradas. Aprendeu um monte de palavras novas nas férias sem perceber.']
+  ] : [
+    ['Jessica', 'mom of Emma, 9', '🦄', 'Homework used to be a fight. Now it’s 15 minutes after snack time and she shows me the “DONE” card herself.'],
+    ['David', 'dad of Noah, 10', '🦖', 'I snap the study guide on Sunday and all week he practices exactly what will be on the test.'],
+    ['Priya', 'mom of Aria and Leo', '🐼', 'Each kid has their own PIN and pace. The summary shows me who needs help with what.'],
+    ['Mike', 'dad of Lily, 8', '🐬', 'She loves the narrated stories. She picked up so many new words over the break without noticing.']
+  ];
+  const depoHtml = () => `<div class="mt-5"><p class="text-label-lg text-on-surface mb-2">${tx('Como as famílias usam', 'How families use it')}</p>
+    <div class="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-1 px-1 snap-x">${DEPO().map(([n, q, av, t]) => `<div class="snap-start min-w-[250px] max-w-[250px] bg-surface-container-lowest border-2 border-surface-container-high rounded-2xl p-4 flex flex-col gap-2">
+      <span class="text-[11px] uppercase tracking-wide text-on-surface-variant">${tx('Exemplo ilustrativo', 'Illustrative example')}</span>
+      <p class="text-body-md text-on-surface">“${esc(t)}”</p>
+      <div class="flex items-center gap-2 mt-auto"><span class="w-9 h-9 rounded-full bg-primary-fixed/50 flex items-center justify-center text-[20px]">${av}</span><span class="text-label-sm text-on-surface-variant"><b class="text-on-surface">${esc(n)}</b> · ${esc(q)}</span></div></div>`).join('')}</div>
+    <p class="text-[11px] text-on-surface-variant mt-1">${tx('Depoimentos ilustrativos, com nomes fictícios, para mostrar como o app pode ser usado.', 'Illustrative testimonials with fictional names, to show how the app can be used.')}</p></div>`;
+  const infoCard = (ic, t, b, open) => `<details class="group bg-surface-container-lowest border-2 border-surface-container-high rounded-2xl" ${open ? 'open' : ''}><summary class="list-none cursor-pointer px-4 py-3.5 flex items-center gap-3"><span class="text-[26px]">${ic}</span><b class="text-label-lg text-on-surface flex-1">${t}</b>${I('expand_more', 'text-on-surface-variant transition group-open:rotate-180')}</summary><div class="px-4 pb-4 -mt-1 text-body-md text-on-surface-variant space-y-1.5">${b}</div></details>`;
+  const saibaCards = () => [
+    infoCard('📚', tx('Como funciona', 'How it works'), tx('<p>Uma lição curta por dia com 3 partes: <b>leitura</b>, <b>palavras novas</b> e <b>reforço das matérias da escola</b>.</p><p>As perguntas são criadas a partir do material que você envia e mudam a cada vez (números, jeitos de perguntar), para a criança aprender de verdade e não decorar.</p>', '<p>One short lesson a day in 3 parts: <b>reading</b>, <b>new words</b> and <b>school subject practice</b>.</p><p>Questions are created from the material you send and change every time, so your child really learns instead of memorizing.</p>'), true),
+    infoCard('📸', tx('Onde você coloca o material', 'Where you add material'), tx('<p>Toque no <b>cadeado 🔒</b> no topo → <b>Área dos pais</b> → <b>Material</b>. Tire foto das páginas (ou mande PDF) e escolha <b>“Estudo do dia a dia”</b> ou <b>“Cai na prova”</b> com a data.</p><p>Em poucos minutos vira lição. As fotos são apagadas assim que a lição fica pronta.</p>', '<p>Tap the <b>lock 🔒</b> at the top → <b>Parents</b> → <b>Material</b>. Snap the pages (or send a PDF) and choose <b>“Everyday study”</b> or <b>“On the test”</b> with the date.</p><p>It becomes a lesson in a few minutes. Photos are deleted as soon as it’s ready.</p>')),
+    infoCard('▶️', tx('Onde a criança faz a lição', 'Where your child does the lesson'), tx('<p>Na tela <b>Hoje</b>, botão <b>Começar</b>. Quando termina, aparece o cartão <b>FEITO ✅</b> com dia e hora, para ela mostrar para você.</p>', '<p>On the <b>Today</b> screen, tap <b>Start</b>. When done, a <b>DONE ✅</b> card shows the day and time, so your child can show you.</p>')),
+    infoCard('📊', tx('Como você acompanha', 'How you follow along'), tx('<p>No <b>Resumo</b>: dias estudados, acertos, palavras aprendidas, nota estimada e simulado antes da prova. Dá para copiar, mandar por WhatsApp ou baixar em PDF.</p>', '<p>In the <b>Summary</b>: study days, accuracy, words learned, estimated grade and a practice test before the exam. Copy, share or download as PDF.</p>')),
+    infoCard('🏖️', tx('Modo férias: temas narrados', 'Holiday mode: narrated topics'), tx('<p>Histórias faladas, com palavras novas e perguntas, para manter o hábito nas férias e o ano todo.</p><p>O app já vem com <b>2 temas grátis</b> para experimentar. O <b>Pacote Férias</b> traz <b>10 temas à sua escolha</b> de uma lista com mais de 20 (dinossauros, espaço, corpo humano, Roma Antiga…), e dá para comprar mais.</p>', '<p>Spoken stories with new words and questions, to keep the habit over holidays and all year.</p><p>The app comes with <b>2 free topics</b> to try. The <b>Holiday Pack</b> brings <b>10 topics of your choice</b> from a list of 20+ (dinosaurs, space, the human body, Ancient Rome…), and you can buy more.</p>')),
+    infoCard('🛡️', tx('Segurança da criança', 'Child safety'), tx('<p>Só apelido (nunca nome completo), sem anúncios, sem venda de dados. Gravações e fotos são privadas da família.</p>', '<p>Nickname only (never full name), no ads, no data selling. Recordings and photos stay private to your family.</p>'))
+  ].join('');
+
   /* ---------- fluxo da criança (primeira ou nova) ---------- */
   function start(opts) {
     opts = opts || {};
     const first = !!opts.first;
     const others = A().kids.slice();
     const d = { apelido: '', idade: null, mes_nasc: null, idioma_app: QK.lang === 'en' ? 'en' : 'pt-BR', avatar: AVATARES[others.length % AVATARES.length] || '🦄', foco: [], minutos: 15, dias: [1, 2, 3, 4, 5], pin: '' };
-    const steps = (first ? ['oi', 'termos'] : []).concat(['apelido', 'idade', 'mes', 'idioma', 'foco', 'meta', 'dias', 'pin', 'promessa'], first ? ['casa', 'planos'] : []);
-    const N = steps.length; let i = 0, saved = null;
-    const go = k => { i = Math.max(0, Math.min(N - 1, k)); draw(); };
-    const next = () => go(i + 1), prev = () => (i === 0 ? (first ? null : A().picker()) : go(i - 1));
-    const back = i => i > 0 && !saved ? prev : (!first && i === 0 ? () => A().picker() : null);
+    const steps = (first ? ['oi', 'parabens', 'saiba', 'termos'] : []).concat(['apelido', 'idade', 'mes', 'idioma', 'foco', 'meta', 'dias', 'constancia', 'pin', 'promessa'], first ? ['casa', 'planos'] : []);
+    const N = steps.length; let i = 0, saved = null, dir = 1;
+    const idx = n => steps.indexOf(n);
+    const go = k => { dir = k < i ? -1 : 1; i = Math.max(0, Math.min(N - 1, k)); draw(); };
+    // "saiba mais" só aparece se o pai pedir; voltar pula ele se não foi visto
+    const next = () => go(steps[i + 1] === 'saiba' && !d.querSaber ? i + 2 : i + 1);
+    const prev = () => (i === 0 ? (first ? null : A().picker()) : go(steps[i - 1] === 'saiba' && !d.querSaber ? i - 2 : i - 1));
+    const back = i => i > 0 ? prev : (!first ? () => A().picker() : null);
     const nome = () => esc(d.apelido || tx('sua criança', 'your child'));
 
     function draw() {
       const s = steps[i], bk = back(i), common = { step: i + 1, total: N, back: bk };
       if (s === 'oi') {
-        frame(Object.assign(common, { back: null, btn: tx('Começar', 'Start'), foot: `<button id="tenho" class="w-full h-11 text-label-md text-primary">${tx('Recebi um convite de outro responsável', 'I got an invite from another parent')}</button>`, body: `<div class="text-center pt-6">${mascot(150)}<h1 class="text-headline-xl-mobile text-on-surface mt-4">${tx('Oi! Eu sou o Quico.', "Hi! I'm Quico.")}</h1><p class="text-body-lg text-on-surface-variant mt-2">${tx('Vou te ajudar a montar o estudo do seu filho em 1 minuto. São perguntas rápidas, uma por tela.', "I'll help you set up your child's study in 1 minute. Quick questions, one per screen.")}</p></div>
-          <div id="cv" class="hidden mt-6 bg-surface-container-low rounded-2xl p-4 space-y-2"><p class="text-body-md text-on-surface">${tx('Digite o código que você recebeu:', 'Type the code you received:')}</p><div class="flex gap-2"><input id="cod" class="${inputCls} !h-12 !text-label-lg uppercase tracking-widest" maxlength="8" autocapitalize="characters" autocomplete="off"><button id="acc" class="h-12 px-5 rounded-xl bg-primary-container text-on-primary text-label-lg">OK</button></div></div>` }));
+        frame(Object.assign(common, { back: null, btn: tx('Oi, Quico! 👋', 'Hi, Quico! 👋'), foot: `<button id="tenho" class="w-full h-11 text-label-md text-primary">${tx('Recebi um convite de outro responsável', 'I got an invite from another parent')}</button>`, body: `<div class="text-center pt-4 mb-6 [&>svg]:mx-auto">${mascot(130)}</div>
+          ${bubble([tx('Oi! Eu sou o Quico 👋', "Hi! I'm Quico 👋"), tx('Sou o ajudante do Quest Kids. Vou montar o estudo do seu filho junto com você, em 1 minutinho.', "I'm the Quest Kids helper. I'll set up your child's study with you in about a minute."), tx('É só responder umas perguntas rápidas. Vamos?', 'Just a few quick questions. Ready?')], 'none')}
+          <div id="cv" class="hidden mt-2 bg-surface-container-low rounded-2xl p-4 space-y-2"><p class="text-body-md text-on-surface">${tx('Digite o código que você recebeu:', 'Type the code you received:')}</p><div class="flex gap-2"><input id="cod" class="${inputCls} !h-12 !text-label-lg uppercase tracking-widest" maxlength="8" autocapitalize="characters" autocomplete="off"><button id="acc" class="h-12 px-5 rounded-xl bg-primary-container text-on-primary text-label-lg">OK</button></div></div>` }));
         $('#tenho').onclick = () => { $('#cv').classList.remove('hidden'); $('#cod').focus(); };
         $('#acc').onclick = async () => { const c = $('#cod').value.trim(); if (!c) return; try { await DB.rpc('aceitar_convite', { cod: c }); toast('✅ ' + tx('Você entrou na família!', 'You joined the family!')); await A().loadFamily(); A().picker(); } catch (x) { toast(A().inviteErr(x), 4500); } };
+        return ($('#nx').onclick = next);
+      }
+      if (s === 'parabens') {
+        const item = (e, t, b) => `<div class="flex gap-3 items-start bg-surface-container-lowest border-2 border-surface-container-high rounded-2xl p-3.5"><span class="text-[28px] leading-none">${e}</span><span class="text-body-md text-on-surface"><b>${t}</b><br><span class="text-on-surface-variant">${b}</span></span></div>`;
+        frame(Object.assign(common, { btn: tx('Vamos começar', "Let's start"), foot: `<button id="saber" class="w-full h-11 text-label-md text-primary">${tx('Quero entender melhor como funciona', 'Tell me more about how it works')}</button>`, body: `${bubble([tx('Antes de tudo: parabéns! 🎉', 'First of all: congratulations! 🎉'), tx('Você está dando ao seu filho um estudo de qualidade, todos os dias, feito com o material da própria escola dele.', "You're giving your child quality study every day, built from their own school material."), tx('E o seu trabalho é bem simples:', 'And your part is really simple:')])}
+          <div class="space-y-2.5">${item('📸', tx('1. Enviar o material', '1. Send the material'), tx('Fotos das páginas que ele está estudando, uma vez por semana (ou quando tiver prova).', "Photos of the pages they're studying, once a week (or before a test)."))}
+          ${item('💬', tx('2. Incentivar a lição', '2. Encourage the lesson'), tx('Nos dias que vocês combinarem. São só 15 a 20 minutinhos.', 'On the days you agree on. Just 15 to 20 minutes.'))}
+          ${item('✨', tx('O resto é comigo', 'I handle the rest'), tx('Eu crio as lições, corrijo, mostro o progresso e aviso quando precisar de atenção.', 'I create the lessons, check answers, show progress and let you know when something needs attention.'))}</div>` }));
+        $('#saber').onclick = () => { d.querSaber = true; go(idx('saiba')); };
+        return ($('#nx').onclick = () => { d.querSaber = false; go(idx('termos')); });
+      }
+      if (s === 'saiba') {
+        frame(Object.assign(common, { btn: tx('Entendi, vamos lá!', "Got it, let's go!"), body: `${bubble([tx('Claro! Aqui está o principal.', "Sure! Here's what matters most."), tx('Toque em cada cartão para ver mais:', 'Tap each card to see more:')])}
+          <div class="space-y-2.5">${saibaCards()}</div>${depoHtml()}` }));
         return ($('#nx').onclick = next);
       }
       if (s === 'termos') {
@@ -220,6 +298,18 @@
         app().querySelectorAll('[data-p]').forEach(b => b.onclick = () => { d.dias = b.dataset.p === 'all' ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5]; draw(); });
         return ($('#nx').onclick = next);
       }
+      if (s === 'constancia') {
+        const w = d.dias.length || 5;
+        const semana = (on, lbl, sub) => `<div class="bg-surface-container-lowest border-2 ${on ? 'border-primary-container' : 'border-surface-container-high'} rounded-2xl p-3.5"><div class="flex items-center justify-between mb-2"><b class="text-label-lg text-on-surface">${lbl}</b><span class="text-label-sm ${on ? 'text-primary' : 'text-on-surface-variant'}">${sub}</span></div>
+          <div class="grid grid-cols-7 gap-1.5">${DIAS().map((n, k) => { const x = on ? d.dias.includes(k) : k === 6; return `<div class="flex flex-col items-center gap-1"><span class="w-full ${on ? 'h-6' : (x ? 'h-16' : 'h-1.5')} rounded-lg ${x ? (on ? 'bg-primary-container' : 'bg-secondary-container') : 'bg-surface-container-high'}"></span><span class="text-[11px] text-on-surface-variant">${n}</span></div>`; }).join('')}</div></div>`;
+        frame(Object.assign(common, { btn: tx('Combinado!', 'Deal!'), body: `${bubble([tx('Um segredo que faz toda a diferença: <b>constância</b>.', 'A secret that makes all the difference: <b>consistency</b>.'), tx('Um pouquinho todo dia vale mais do que muito de uma vez. O cérebro guarda melhor quando revê o conteúdo aos poucos, em dias diferentes.', 'A little every day beats a lot at once. The brain remembers better when it reviews in small pieces, on different days.'), tx(`Por isso a lição é curta: ${d.minutos} min, ${w} ${w === 1 ? tx('dia', 'day') : tx('dias', 'days')} por semana.`, `That's why lessons are short: ${d.minutos} min, ${w} day${w === 1 ? '' : 's'} a week.`)])}
+          <div class="space-y-3">${semana(true, tx('✅ Assim funciona', '✅ This works'), tx(`${d.minutos} min nos dias combinados`, `${d.minutos} min on set days`))}${semana(false, tx('😓 Assim cansa e esquece', '😓 This tires and forgets'), tx('tudo de uma vez no fim de semana', 'all at once on the weekend'))}</div>
+          <div class="mt-4 bg-surface-container-low rounded-2xl p-4 space-y-2 text-body-md text-on-surface">
+            <p class="flex gap-2"><span>⏰</span><span>${tx('Escolha um <b>horário fixo</b> (ex.: depois do lanche). Vira hábito em poucas semanas.', 'Pick a <b>fixed time</b> (e.g. after snack). It becomes a habit in a few weeks.')}</span></p>
+            <p class="flex gap-2"><span>🎉</span><span>${tx('Comemore o <b>FEITO ✅</b> com seu filho. Elogiar o esforço mantém a vontade.', 'Celebrate the <b>DONE ✅</b> with your child. Praising effort keeps them motivated.')}</span></p>
+            <p class="flex gap-2"><span>🔥</span><span>${tx('A sequência de dias aparece no app e motiva a não parar.', 'The day streak shows in the app and motivates them to keep going.')}</span></p></div>` }));
+        return ($('#nx').onclick = next);
+      }
       if (s === 'pin') {
         const multi = others.length >= 1;
         frame(Object.assign(common, { inlineBtn: true, btn: tx('Salvar e continuar', 'Save and continue'), body: `${bubble(multi ? tx(`Cada criança tem o seu PIN. Crie um para ${nome()}:`, `Each child has their own PIN. Create one for ${nome()}:`) : tx(`Quer um PIN para ${nome()}? É opcional.`, `Want a PIN for ${nome()}? It's optional.`))}
@@ -237,7 +327,7 @@
       if (s === 'promessa') {
         const w = d.dias.length, atv = atividades(d.minutos) * w * 13, pal = Math.round(w * 13 * 4), horas = Math.round(d.minutos * w * 13 / 60);
         const bars = [1, 2, 3].map(m => Math.round(atv * m / 3));
-        frame(Object.assign(common, { back: null, btn: tx('Continuar', 'Continue'), body: `${bubble(tx(`Pronto! Este é o plano de ${nome()} para os próximos 3 meses:`, `Done! Here is ${nome()}'s plan for the next 3 months:`))}
+        frame(Object.assign(common, { btn: tx('Continuar', 'Continue'), body: `${bubble([tx(`Prontinho! ${nome()} já está no app. 🎉`, `All set! ${nome()} is in the app. 🎉`), tx(`Este é o plano de ${nome()} para os próximos 3 meses:`, `Here is ${nome()}'s plan for the next 3 months:`)])}
           <div class="bg-surface-container-lowest border-2 border-surface-container-high rounded-2xl p-4 space-y-4">
             <div class="flex items-end justify-around h-36 gap-4 px-2">${bars.map((v, k) => `<div class="flex-1 flex flex-col items-center justify-end h-full gap-1"><b class="text-label-md text-on-surface">${v}</b><div class="w-full max-w-[56px] rounded-t-xl ${k === 2 ? 'bg-primary-container' : 'bg-primary-container/45'}" style="height:${Math.round(100 * (k + 1) / 3)}%"></div><span class="text-label-sm text-on-surface-variant">${tx('Mês', 'Month')} ${k + 1}</span></div>`).join('')}</div>
             <div class="grid grid-cols-3 gap-2 text-center">
@@ -245,14 +335,15 @@
               <div class="bg-surface-container-low rounded-xl p-2"><b class="text-headline-md text-on-surface block">~${pal}</b><span class="text-label-sm text-on-surface-variant">${tx('palavras novas', 'new words')}</span></div>
               <div class="bg-surface-container-low rounded-xl p-2"><b class="text-headline-md text-on-surface block">~${horas} h</b><span class="text-label-sm text-on-surface-variant">${tx('de estudo', 'of study')}</span></div></div>
             <p class="text-body-sm text-on-surface-variant">${tx(`Com ${d.minutos} min por dia, ${w} ${w === 1 ? 'dia' : 'dias'} por semana. É uma estimativa: cada criança tem o seu ritmo, e o que faz a diferença é estudar um pouco todo dia.`, `With ${d.minutos} min a day, ${w} day${w === 1 ? '' : 's'} a week. This is an estimate: every child has their own pace, and what makes the difference is a little every day.`)}</p>
-          </div>` }));
+          </div>
+          <p class="text-body-sm text-on-surface-variant mt-3 text-center">${tx('Quer mudar alguma resposta? Toque na seta ← lá em cima. Depois dá para mudar tudo em Área dos pais → Crianças.', 'Want to change an answer? Tap the ← arrow at the top. You can change everything later in Parents → Kids.')}</p>` }));
         return ($('#nx').onclick = () => first ? next() : A().picker());
       }
       if (s === 'casa') {
         const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), standalone = navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
-        if (standalone) return next();
+        if (standalone) return dir < 0 ? prev() : next();
         const step = (n, t) => `<li class="flex items-start gap-3"><span class="w-8 h-8 rounded-full bg-primary-container text-on-primary text-label-lg flex items-center justify-center shrink-0">${n}</span><span class="text-body-md text-on-surface pt-1">${t}</span></li>`;
-        frame(Object.assign(common, { back: null, btn: tx('Feito!', 'Done!'), foot: `<button id="skip" class="w-full h-12 text-label-md text-on-surface-variant">${tx('Faço depois', "I'll do it later")}</button>`, body: `${bubble(tx('Coloque o Quest Kids na tela de início, como um app. Assim fica fácil todo dia!', 'Add Quest Kids to your home screen, like an app. Easy every day!'))}
+        frame(Object.assign(common, { btn: tx('Feito!', 'Done!'), foot: `<button id="skip" class="w-full h-12 text-label-md text-on-surface-variant">${tx('Faço depois', "I'll do it later")}</button>`, body: `${bubble(tx('Coloque o Quest Kids na tela de início, como um app. Assim fica fácil todo dia!', 'Add Quest Kids to your home screen, like an app. Easy every day!'))}
           <div class="bg-surface-container-lowest border-2 border-surface-container-high rounded-2xl p-4">
             <h3 class="text-label-lg text-on-surface mb-3">${ios ? 'iPhone / iPad (Safari)' : 'Android (Chrome)'}</h3>
             <ol class="space-y-3">${ios
@@ -263,19 +354,21 @@
         $('#skip').onclick = next; return ($('#nx').onclick = next);
       }
       if (s === 'planos') {
-        frame(Object.assign(common, { back: null, body: '<div class="spin" style="margin-top:20vh"></div>' }));
+        frame(Object.assign(common, { body: '<div class="spin" style="margin-top:20vh"></div>' }));
         const moeda = localStorage.getItem('qk.moeda') || (pt() ? 'brl' : 'usd');
         Promise.all([DB.sel('precos', { eq: { moeda } }).catch(() => []), DB.rpc('vagas_fundador').catch(() => 0)]).then(([precos, vagas]) => {
           const fund = moeda === 'brl' && vagas > 0;
           const fim = new Date(Date.now() + 7 * 864e5).toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: 'numeric', month: 'long' });
-          frame(Object.assign(common, { back: null, btn: tx('Começar 7 dias grátis', 'Start 7 days free'),
+          frame(Object.assign(common, { btn: tx('Começar 7 dias grátis', 'Start 7 days free'),
             foot: `<p class="text-center text-label-sm text-on-surface-variant">${tx('Cancele quando quiser · Sem cartão agora', 'Cancel anytime · No card now')}</p>`,
-            body: `<div class="text-center mb-4">${mascot(88)}<h1 class="text-headline-xl-mobile text-on-surface mt-2">${tx('Experimente tudo grátis por 7 dias', 'Try everything free for 7 days')}</h1></div>
+            body: `<div class="text-center mb-4 [&>svg]:mx-auto">${mascot(88)}<h1 class="text-headline-xl-mobile text-on-surface mt-2">${tx('Experimente tudo grátis por 7 dias', 'Try everything free for 7 days')}</h1></div>
               ${precos.length ? plansHtml(precos, moeda, fund, 'anual') : ''}
               <div class="mt-4 bg-surface-container-low rounded-2xl p-4 space-y-2 text-body-sm text-on-surface-variant">
                 <p class="flex gap-2">${I('event_available', 'text-[18px] text-primary shrink-0')}<span>${tx(`<b class="text-on-surface">Hoje:</b> acesso completo, sem cartão e sem cobrança.`, `<b class="text-on-surface">Today:</b> full access, no card, no charge.`)}</span></p>
                 <p class="flex gap-2">${I('notifications', 'text-[18px] text-primary shrink-0')}<span>${tx(`<b class="text-on-surface">${fim}:</b> o teste acaba e o app pede para escolher um plano. Nada é cobrado sem você assinar.`, `<b class="text-on-surface">${fim}:</b> the trial ends and the app asks you to pick a plan. Nothing is charged unless you subscribe.`)}</span></p>
                 <p class="flex gap-2">${I('autorenew', 'text-[18px] text-primary shrink-0')}<span>${tx('Se assinar, o plano renova automaticamente até você cancelar, na Área dos pais → Conta.', 'If you subscribe, the plan renews automatically until you cancel in Parents → Account.')}</span></p></div>
+              <div class="mt-3 bg-surface-container-low rounded-2xl p-3 flex items-center gap-3"><span class="text-[26px]">🏖️</span><p class="text-body-sm text-on-surface"><b>${tx('Modo férias:', 'Holiday mode:')}</b> ${tx('2 temas narrados grátis para experimentar. Pacote Férias opcional, com 10 temas à sua escolha.', '2 free narrated topics to try. Optional Holiday Pack with 10 topics of your choice.')}</p></div>
+              ${depoHtml()}
               ${fund ? `<p class="mt-3 text-center text-label-md text-secondary">🎁 ${tx(`Preço de fundador: restam ${vagas} vagas.`, `Founder price: ${vagas} spots left.`)}</p>` : ''}` }));
           app().querySelectorAll('input[name=plano]').forEach(r => r.onchange = () => { try { localStorage.setItem('qk.planoEscolhido', r.value); } catch (e) {} });
           $('#nx').onclick = () => { toast(tx('🎉 Bons estudos! Você escolhe o plano quando quiser.', '🎉 Happy studying! Pick a plan whenever you like.'), 3500); A().picker(); };
@@ -292,6 +385,12 @@
       const pilares = { leitura: Math.round(20 * pil.leitura / tot) * 5, palavras: Math.round(20 * pil.palavras / tot) * 5 }; pilares.reforco = 100 - pilares.leitura - pilares.palavras;
       const row = { familia_id: A().fam.id, apelido: d.apelido, avatar: d.avatar, idade: d.idade, mes_nasc: d.mes_nasc || null, idioma_app: d.idioma_app, idiomas: [d.idioma_app], estilo: 'simples', tema: 'claro', minutos: d.minutos, dias: d.dias, pilares };
       try {
+        if (saved) {
+          const up = Object.assign({}, row); delete up.familia_id;
+          await DB.upd('criancas', { eq: { id: saved } }, up).catch(async e => { if (!/mes_nasc|column|schema/i.test(e.message)) throw e; delete up.mes_nasc; await DB.upd('criancas', { eq: { id: saved } }, up); });
+          if (d.pin) await DB.rpc('definir_pin', { crianca: saved, pin: d.pin }).catch(e => toast(e.message));
+          await A().loadFamily(); toast('✅ ' + tx('Atualizado', 'Updated')); return next();
+        }
         let r;
         try { r = await DB.ins('criancas', row); }
         catch (e) { if (!/mes_nasc|column|schema/i.test(e.message)) throw e; const r2 = Object.assign({}, row); delete r2.mes_nasc; r = await DB.ins('criancas', r2); }

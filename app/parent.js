@@ -290,7 +290,8 @@
   function temasHtml(own, tcfg, tdb, prodTemas) {
     const cat = temasCat(tdb), temPack = own.includes('ferias1');
     const badge = t => t.status !== 'pronto' ? `<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-[11px]">${tx('Em breve', 'Soon')}</span>` : t.pacote === 'gratis' ? `<span class="px-2 py-0.5 rounded-full bg-primary-container text-on-primary text-[11px]">${tx('Grátis', 'Free')}</span>` : t.pacote === 'ferias1' ? `<span class="px-2 py-0.5 rounded-full ${temPack ? 'bg-primary/15 text-primary' : 'bg-secondary-fixed text-on-secondary-fixed'} text-[11px]">${temPack ? tx('Seu', 'Yours') : tx('Pacote Férias', 'Holiday pack')}</span>` : `<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-[11px]">${tx('Extra', 'Extra')}</span>`;
-    const pode = t => t.status === 'pronto' && (t.pacote === 'gratis' || own.includes(t.pacote) || own.includes(t.id));
+    const pode = t => QKTemas.liberado(t, own);
+    const escolhidos = new Set(); tcfg.forEach(r => ((r.dados && r.dados.ativos) || []).forEach(id => { const t = cat.find(x => x.id === id); if (t && t.pacote !== 'gratis') escolhidos.add(id); }));
     const ativo = (k, t) => { const r = tcfg.find(x => x.crianca_id === k.id); return r && r.dados && r.dados.ativos ? r.dados.ativos.includes(t.id) : t.pacote === 'gratis'; };
     return `<section class="${card} mb-6 space-y-3">
       <div class="flex items-start justify-between gap-2 flex-wrap"><div><h2 class="text-headline-md text-on-surface">🎧 ${tx('Temas narrados · modo férias', 'Narrated topics · holiday mode')}</h2>
@@ -301,7 +302,7 @@
         <b class="text-label-md text-on-surface leading-tight line-clamp-3">${esc(pt() ? t.pt : t.en)}</b>
         <span class="text-[11px] text-on-surface-variant">${(t.faixas || []).map(f => f + ' ' + tx('anos', 'yrs')).join(' · ')}${(t.idiomas || []).length ? ' · ' + t.idiomas.map(l => l === 'en' ? '🇺🇸' : '🇧🇷').join('') : ''}</span>
         ${pode(t) ? A().kids.map(k => `<button data-tat="${k.id}|${esc(t.id)}" class="mt-auto h-9 rounded-lg text-label-sm ${ativo(k, t) ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface'}">${ativo(k, t) ? '✓ ' : '+ '}${esc(k.avatar)} ${esc(k.apelido)}</button>`).join('') : ''}</div>`).join('')}</div>
-      <p class="text-body-sm text-on-surface-variant">${tx('Toque no nome da criança para ativar ou desativar o tema na Biblioteca dela. Cada tema terá duas versões de áudio: 6–9 e 10–14 anos.', "Tap a child's name to turn the topic on or off in their Library. Each topic will have two audio versions: ages 6–9 and 10–14.")}</p></section>`;
+      <p class="text-body-sm text-on-surface-variant">${tx('Toque no nome da criança para ativar ou desativar o tema na Biblioteca dela. Cada tema terá duas versões de áudio: 6–9 e 10–14 anos.', "Tap a child's name to turn the topic on or off in their Library. Each topic will have two audio versions: ages 6–9 and 10–14.")}${temPack ? ' ' + tx(`Pacote Férias: ${escolhidos.size} de ${QKTemas.PACK_MAX} temas escolhidos.`, `Holiday Pack: ${escolhidos.size} of ${QKTemas.PACK_MAX} topics chosen.`) : ''}</p></section>`;
   }
 
   /* ================= o que está sendo estudado agora ================= */
@@ -459,8 +460,13 @@
     const bt = $('#buytemas'); if (bt) bt.onclick = () => comprar(prodTemas.codigo, bt);
     app().querySelectorAll('[data-tat]').forEach(b => b.onclick = async () => {
       const [kidId, tid] = b.dataset.tat.split('|'); const row = tcfg.find(r => r.crianca_id === kidId); const own = compras.map(c => c.item);
-      const all = temasCat(tdb).filter(t => t.status === 'pronto' && (t.pacote === 'gratis' || own.includes(t.pacote) || own.includes(t.id)));
+      const cat = temasCat(tdb), all = cat.filter(t => QKTemas.liberado(t, own));
       let ativos = row && row.dados && row.dados.ativos ? row.dados.ativos.slice() : all.filter(t => t.pacote === 'gratis').map(t => t.id);
+      if (!ativos.includes(tid)) {
+        const t = cat.find(x => x.id === tid), esc2 = new Set();
+        tcfg.forEach(r => ((r.dados && r.dados.ativos) || []).forEach(id => { const tt = cat.find(x => x.id === id); if (tt && tt.pacote !== 'gratis' && !own.includes(tt.id)) esc2.add(id); }));
+        if (t && t.pacote !== 'gratis' && !own.includes(t.id) && !esc2.has(tid) && esc2.size >= QKTemas.PACK_MAX) return toast(tx(`O Pacote Férias tem ${QKTemas.PACK_MAX} temas. Desative um para escolher outro.`, `The Holiday Pack has ${QKTemas.PACK_MAX} topics. Turn one off to pick another.`), 4500);
+      }
       ativos = ativos.includes(tid) ? ativos.filter(x => x !== tid) : ativos.concat(tid);
       try { await DB.ins('progresso', { crianca_id: kidId, chave: 'temas', dados: { ativos }, atualizado_em: new Date().toISOString() }, { upsert: true, onConflict: 'crianca_id,chave' }); material(); } catch (x) { toast(x.message); }
     });
@@ -661,6 +667,10 @@
           <p class="text-body-sm text-on-surface-variant">${tx('Parceiros', 'Partners')}: ${(d.afiliados || []).map(a => `${esc(a.codigo)} (${a.desconto_pct}% desc · ${a.comissao_pct}% com · ${a.indicados} ${tx('cadastros', 'sign-ups')})`).join(' · ') || '—'}</p></section>
         <section class="${card} space-y-2"><h2 class="text-headline-md text-on-surface">⭐ ${tx('Notas das provas (feedback dos pais)', 'Test results (parent feedback)')}</h2>${(d.feedbacks || []).map(x => `<div class="border-b border-surface-container-high py-1.5"><b class="text-label-md">${esc(x.materia || '')} · ${x.nota ?? '—'}</b>${x.autoriza_depoimento ? ' <span class="text-primary text-label-sm">✓ ' + tx('pode usar como depoimento', 'ok to use as testimonial') + '</span>' : ''}<p class="text-body-sm text-on-surface-variant">${esc(x.comentario || '')}</p></div>`).join('') || `<p class="text-body-sm text-on-surface-variant">—</p>`}</section>
       </div>
+      <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface">👪 ${tx('Contas', 'Accounts')}</h2>
+        <p class="text-body-sm text-on-surface-variant">${tx('Para testar o cadastro do zero: apague a conta e entre de novo com o mesmo e-mail (ou crie a conta de novo). Logins de administrador nunca são apagados: eles ganham uma família nova vazia.', 'To test sign-up from scratch: delete the account and log in again. Admin logins are never deleted: they get a new empty family.')}</p>
+        <div class="flex gap-2"><input id="cbusca" class="${inputCls}" type="search" placeholder="${tx('Buscar por e-mail', 'Search by email')}"><button id="cbtn" class="h-12 px-4 rounded-xl bg-surface-container-high text-on-surface text-label-lg">${tx('Buscar', 'Search')}</button></div>
+        <div id="clist" class="space-y-2"><p class="text-body-sm text-on-surface-variant">…</p></div></section>
       <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface">🎧 ${tx('Subir um tema narrado', 'Upload a narrated topic')}</h2>
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-2"><input id="tt" class="${inputCls} sm:col-span-2" placeholder="${tx('Título', 'Title')}"><input id="ti" class="${inputCls}" placeholder="🎧" maxlength="4"><select id="tf" class="${inputCls}"><option value="10-14">10–14</option><option value="6-9">6–9</option></select></div>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2"><select id="tl" class="${inputCls}"><option value="pt-BR">Português</option><option value="en">English</option></select><select id="tp" class="${inputCls}"><option value="">${tx('Grátis', 'Free')}</option><option value="ferias1">${tx('Pacote Férias', 'Holiday pack')}</option><option value="extra">Extra</option></select><input id="ta" type="file" accept="audio/*" class="text-body-sm"></div>
@@ -669,6 +679,28 @@
         ${btnP('tsave', tx('Publicar tema (1 capítulo)', 'Publish topic (1 chapter)'), 'upload')}</section>
     </div>`);
     $('#gback').onclick = () => { tab = 'conta'; render(); };
+    const contas = async () => {
+      const box2 = $('#clist'); if (!box2) return;
+      let cs = []; try { cs = await DB.rpc('admin_contas', { busca: ($('#cbusca').value || '').trim() || null }); } catch (x) { box2.innerHTML = `<p class="text-body-sm text-error">${/admin_contas|function|schema/i.test(x.message) ? tx('Rode o SQL 07 no Supabase.', 'Run SQL 07 in Supabase.') : esc(x.message)}</p>`; return; }
+      box2.innerHTML = cs.map(c => `<div class="flex items-start justify-between gap-3 border-b border-surface-container-high py-2"><div class="min-w-0"><b class="text-label-md text-on-surface break-all">${esc(c.emails || '—')}</b>${c.minha ? ` <span class="text-label-sm bg-primary/10 text-primary px-2 py-0.5 rounded-full">${tx('sua conta', 'yours')}</span>` : ''}
+        <p class="text-body-sm text-on-surface-variant">${esc(c.criancas || tx('sem crianças', 'no kids'))} · ${c.licoes} ${tx('lições', 'lessons')} · ${c.sessoes} ${tx('sessões', 'sessions')} · ${esc(c.plano || '')} · ${new Date(c.criado_em).toLocaleDateString(pt() ? 'pt-BR' : 'en-US')}</p></div>
+        <button data-del="${esc(c.id)}" class="shrink-0 h-9 px-3 rounded-lg bg-error-container text-on-error-container text-label-sm">${tx('Apagar', 'Delete')}</button></div>`).join('') || `<p class="text-body-sm text-on-surface-variant">${tx('Nenhuma conta encontrada.', 'No accounts found.')}</p>`;
+      box2.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+        const c = cs.find(x => x.id === b.dataset.del); if (!c) return;
+        const aviso = tx(`APAGAR PARA SEMPRE a conta de ${c.emails}?\n\nCrianças: ${c.criancas || 'nenhuma'}\n${c.licoes} lições e ${c.sessoes} sessões, progresso, material, gravações, convites e assinatura serão apagados. Não dá para desfazer.${c.minha ? '\n\n⚠️ Esta é a SUA conta (onde você está agora).' : ''}\n\nPara confirmar, digite APAGAR:`, `PERMANENTLY delete the account of ${c.emails}?\n\nKids: ${c.criancas || 'none'}\n${c.licoes} lessons, ${c.sessoes} sessions, progress, materials, recordings, invites and subscription will be deleted. This cannot be undone.${c.minha ? '\n\n⚠️ This is YOUR account.' : ''}\n\nType DELETE to confirm:`);
+        const r = prompt(aviso); if (!r || !/^(APAGAR|DELETE)$/i.test(r.trim())) return toast(tx('Nada foi apagado.', 'Nothing was deleted.'));
+        b.disabled = true; b.textContent = '…';
+        try {
+          const res = await DB.fn('ia', { acao: 'apagar_conta', familia: c.id });
+          if (res && res.error) throw new Error(res.error);
+          toast('🗑️ ' + tx(`Conta apagada (${res.arquivos || 0} arquivos, ${res.logins || 0} logins).`, `Account deleted (${res.arquivos || 0} files, ${res.logins || 0} logins).`), 5000);
+          if (c.minha) { setTimeout(() => location.reload(), 1500); return; }
+          contas();
+        } catch (x) { toast(/sem permissão/.test(x.message) ? tx('Só administradores podem apagar contas.', 'Admins only.') : /acao|login|família/.test(x.message) ? x.message : tx('Não deu certo. Confira se a função "ia" foi atualizada.', 'It failed. Check the "ia" function was updated.') + ' ' + x.message, 6000); b.disabled = false; b.textContent = tx('Apagar', 'Delete'); }
+      });
+    };
+    $('#cbtn').onclick = contas; $('#cbusca').onkeydown = e => { if (e.key === 'Enter') contas(); };
+    contas();
     const pg = $('#pagar'); if (pg) pg.onclick = async () => { if (!confirm(tx('Marcar todas as comissões listadas como pagas? Faça isso depois de enviar os PIX.', 'Mark all listed commissions as paid? Do this after sending payouts.'))) return; try { await DB.rpc('admin_pagar_comissao', { ids: d.comissoes.map(x => x.id) }); toast('✅'); render(); } catch (x) { toast(x.message); } };
     $('#tsave').onclick = async () => {
       const tit = $('#tt').value.trim(); if (!tit) return toast(tx('Coloque o título.', 'Add a title.'));

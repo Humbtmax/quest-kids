@@ -286,6 +286,8 @@
       if (fn === 'tem_pin') return !!db.pins.find(p => p.crianca_id === a.crianca);
       if (fn === 'tem_senha_pais') return !!db.senha_pais;
       if (fn === 'sou_admin') return true;
+      if (fn === 'admin_contas') return [{ id: 'demo-fam', criado_em: new Date().toISOString(), emails: 'demo@questkids (esta demonstração)', criancas: '🦊 Gabi, 🐱 Bia', licoes: 3, sessoes: 5, plano: 'teste · trialing', minha: true }, { id: 'demo-2', criado_em: new Date(Date.now() - 864e5 * 3).toISOString(), emails: 'exemplo3@demo', criancas: '🐼 Leo', licoes: 1, sessoes: 2, plano: 'anual · active', minha: false }];
+      if (fn === 'minha_familia_nova') return 'demo-fam';
       if (fn === 'meu_painel_afiliado') return { afiliado: db.afiliado || null, indicados: db.afiliado ? 3 : 0, assinantes: db.afiliado ? 1 : 0, a_pagar: db.afiliado ? 1197 : 0, pago: 0, config: { pote: 30, max_desconto: 20, meses: 12 } };
       if (fn === 'salvar_afiliado') { const d = Math.max(0, Math.min(20, +a.desconto || 0)); db.afiliado = { codigo: String(a.cod).toUpperCase(), nome: a.nome_pub, desconto_pct: d, comissao_pct: 30 - d, pix: a.chave_pix }; dsave(db); return db.afiliado; }
       if (fn === 'admin_painel') return { familias: 42, novas7: 6, novas30: 19, por_status: { active: 17, trialing: 21, canceled: 4 }, por_plano: { 'anual*-brl': 9, 'semestral-brl': 3, 'mensal-brl': 4, 'anual-usd': 1 }, cancel30: 2, criancas: 55, ativas7: 38, sessoes7: 214, minutos7: 3120, licoes30: 61, ia_mes: { custo_centavos: 1840, paginas: 233, familias: 29 }, ia_top: [{ familia_id: 'x', email: 'exemplo1@demo', custo_centavos: 410, paginas: 41 }, { familia_id: 'y', email: 'exemplo2@demo', custo_centavos: 190, paginas: 22 }], tarefas: { pronto: 58, erro: 2, sem_limite: 1 }, erros: [{ criado_em: new Date().toISOString(), erro: 'nenhum arquivo legível (use JPG, PNG ou PDF)' }], comissoes: [{ id: 1, codigo: 'ANA10', pix: 'ana@pix', valor_centavos: 1197, moeda: 'brl', criado_em: new Date().toISOString() }], afiliados: [{ codigo: 'ANA10', nome: 'Ana', desconto_pct: 10, comissao_pct: 20, indicados: 5 }], feedbacks: [{ materia: 'Frações', nota: 9.5, comentario: '(exemplo de demonstração) Tirou a melhor nota da turma!', autoriza_depoimento: true, criado_em: new Date().toISOString() }] };
@@ -307,7 +309,7 @@
       dsave(db); return path;
     },
     async signed(bucket, path) { const db = dload(); return (db._files || {})[bucket + '/' + path] || ''; },
-    async fn(name) { if (name === 'checkout' || name === 'portal') throw new Error('No modo demo não há pagamento.'); throw new Error('Função indisponível no modo demo.'); }
+    async fn(name, body) { if (name === 'ia' && body && body.acao === 'apagar_conta') { if (body.familia === 'demo-fam') { localStorage.removeItem('qk.demo'); setTimeout(() => { location.href = location.pathname + '?demo=0'; }, 1200); } return { status: 'apagada', arquivos: 0, logins: 0, mantidos: 1 }; } if (name === 'checkout' || name === 'portal') throw new Error('No modo demo não há pagamento.'); throw new Error('Função indisponível no modo demo.'); }
   };
 
   window.QK = { DEMO, t, setLang, get lang() { return LANG; }, T, $, esc, md, today, addDays, uid, shuffle, toast, Auth, DB: DEMO ? Demo : Live, C };
