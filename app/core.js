@@ -3,7 +3,7 @@
   'use strict';
   const C = window.QK_CONFIG || {};
   try {
-    if (/[?&]demo=0/.test(location.search)) { localStorage.removeItem('qk.demo'); localStorage.removeItem('qk.sess'); history.replaceState(null, '', location.pathname); }
+    if (/[?&]demo=0/.test(location.search)) { localStorage.removeItem('qk.demo'); localStorage.removeItem('qk.sess'); const lg = (location.search.match(/[?&](lang=(pt|en))/) || [])[1]; history.replaceState(null, '', location.pathname + (lg ? '?' + lg : '')); }
     if (/[?&]demo=1/.test(location.search)) localStorage.setItem('qk.demo', '1');
   } catch (e) {}
   const DEMO = !C.SUPABASE_URL || /[?&]demo=(1|gabi)/.test(location.search) || (() => { try { return localStorage.getItem('qk.demo') === '1'; } catch (e) { return false; } })();
@@ -35,7 +35,7 @@
     try {
       localStorage.setItem('qk.demo', '1'); localStorage.setItem('qk.demo.db', JSON.stringify(db));
       localStorage.setItem('qk.sess', JSON.stringify({ demo: true, user: { id: 'demo-user', email: 'demo@questkids' } }));
-      history.replaceState(null, '', location.pathname + '?demo=1');
+      history.replaceState(null, '', location.pathname + '?demo=1' + ((location.search.match(/[?&](lang=(pt|en))/) || [])[1] ? '&' + location.search.match(/[?&](lang=(pt|en))/)[1] : ''));
     } catch (e) { console.warn(e); }
   }
 
@@ -162,7 +162,8 @@
     },
     async signUp(email, password) {
       if (DEMO) { saveSess({ demo: true, user: { id: 'demo-user', email } }); return 'ok'; }
-      const j = await authCall('signup', { email, password, data: { idioma: LANG } });
+      let ref = null; try { ref = localStorage.getItem('qk.ref'); } catch (e) {}
+      const j = await authCall('signup', { email, password, data: Object.assign({ idioma: LANG }, ref ? { ref } : {}) });
       if (j.access_token) { saveSess(fromToken(j)); return 'ok'; }
       return 'confirmar';
     },

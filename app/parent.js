@@ -609,11 +609,12 @@
   }
 
   /* ================= conta e assinatura ================= */
+  async function copiar(t) { try { await navigator.clipboard.writeText(t); toast('📋 ' + tx('Copiado!', 'Copied!')); } catch (e) { const i = document.createElement('textarea'); i.value = t; document.body.appendChild(i); i.select(); try { document.execCommand('copy'); toast('📋 ' + tx('Copiado!', 'Copied!')); } catch (e2) { toast(t, 6000); } i.remove(); } }
   /* ================= parceiros: indique e ganhe / influenciadores ================= */
   const money = (c, m) => (String(m).toLowerCase() === 'usd' ? '$' : 'R$ ') + (c / 100).toFixed(2).replace('.', String(m).toLowerCase() === 'usd' ? '.' : ',');
   function parceiroHtml(d) {
     const a = d.afiliado, cfg = d.config || { pote: 30, max_desconto: 20, meses: 12 }, des = a ? a.desconto_pct : Math.min(10, cfg.max_desconto);
-    const link = a ? location.origin + '/?ref=' + a.codigo : '';
+    const link = a ? location.origin + '/?ref=' + a.codigo : '', linkEn = a ? location.origin + '/en/?ref=' + a.codigo : '';
     return `<section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('handshake', 'text-primary')} ${tx('Indique e ganhe', 'Refer and earn')}</h2>
       <p class="text-body-sm text-on-surface-variant">${tx(`Para pais e influenciadores. Você tem ${cfg.pote}% para dividir como quiser: desconto para quem assinar pelo seu link e comissão para você, por ${cfg.meses} meses de cada assinatura.`, `For parents and influencers. You get ${cfg.pote}% to split as you like: a discount for people who subscribe with your link and a commission for you, for ${cfg.meses} months of each subscription.`)}</p>
       ${lbl(tx('Seu código (aparece no link e no cupom)', 'Your code (in the link and coupon)'))}<input id="afc" class="${inputCls} uppercase tracking-widest" maxlength="16" value="${esc(a ? a.codigo : '')}" placeholder="${tx('EX.: PAULA10', 'E.G. PAULA10')}">
@@ -623,8 +624,11 @@
       <p class="text-body-sm text-on-surface-variant" id="afx"></p>
       ${lbl(tx('Chave PIX para receber (ou e-mail do PayPal fora do Brasil)', 'PIX key to get paid (or PayPal email outside Brazil)'))}<input id="afp" class="${inputCls}" maxlength="120" value="${esc(a ? a.pix || '' : '')}">
       ${btnP('afs', a ? tx('Salvar', 'Save') : tx('Quero ser parceiro', 'Become a partner'), 'check')}
-      ${a ? `<div class="bg-surface-container-low rounded-2xl p-3 space-y-2"><p class="text-label-sm text-on-surface-variant">${tx('Seu link', 'Your link')}</p><p class="text-body-md text-on-surface break-all">${esc(link)}</p>
+      ${a ? `<div class="bg-surface-container-low rounded-2xl p-3 space-y-2"><p class="text-label-sm text-on-surface-variant">🇧🇷 ${tx('Seu link em português', 'Your link in Portuguese')}</p><p class="text-body-md text-on-surface break-all">${esc(link)}</p>
         <div class="grid grid-cols-2 gap-2"><button id="afcopy" class="h-10 rounded-xl bg-surface-container text-label-md text-on-surface">📋 ${tx('Copiar link', 'Copy link')}</button><button id="afshare" class="h-10 rounded-xl bg-surface-container text-label-md text-on-surface">💬 ${tx('Compartilhar', 'Share')}</button></div>
+        <p class="text-label-sm text-on-surface-variant pt-1">🇺🇸 ${tx('Seu link em inglês', 'Your link in English')}</p><p class="text-body-md text-on-surface break-all">${esc(linkEn)}</p>
+        <div class="grid grid-cols-2 gap-2"><button id="afcopyen" class="h-10 rounded-xl bg-surface-container text-label-md text-on-surface">📋 ${tx('Copiar link', 'Copy link')}</button><button id="afshareen" class="h-10 rounded-xl bg-surface-container text-label-md text-on-surface">💬 ${tx('Compartilhar', 'Share')}</button></div>
+        <p class="text-[12px] text-on-surface-variant">${tx('Conta quando outra pessoa abre o link e cria uma conta NOVA no mesmo aparelho. Abrir o seu próprio link na sua conta não conta.', 'It counts when someone else opens the link and creates a NEW account on the same device. Opening your own link in your account does not count.')}</p>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-1">${[[d.indicados, tx('cadastros', 'sign-ups')], [d.assinantes, tx('assinantes', 'subscribers')], [money(d.a_pagar, 'brl'), tx('a receber', 'to receive')], [money(d.pago, 'brl'), tx('já recebido', 'received')]].map(([v, l]) => `<div class="bg-surface-container-lowest rounded-xl p-2"><b class="text-label-lg text-on-surface block">${v}</b><span class="text-[11px] text-on-surface-variant">${l}</span></div>`).join('')}</div>
         <p class="text-[12px] text-on-surface-variant">${tx('Pagamentos uma vez por mês, por PIX, das comissões de assinaturas já pagas. Comissões são canceladas se houver reembolso.', 'Payouts once a month for subscriptions already paid. Commissions are cancelled on refunds.')}</p></div>` : ''}</section>`;
   }
@@ -637,12 +641,36 @@
       try { await DB.rpc('salvar_afiliado', { cod, desconto: +$('#afd').value, nome_pub: $('#afn').value.trim(), chave_pix: $('#afp').value.trim() }); toast('✅ ' + tx('Pronto! Seu link está ativo.', 'Done! Your link is live.')); render(); }
       catch (x) { toast(/duplicate|unique/i.test(x.message) ? tx('Esse código já está em uso. Escolha outro.', 'That code is taken. Pick another.') : x.message, 4000); }
     };
-    const a = d.afiliado; if (!a) return; const link = location.origin + '/?ref=' + a.codigo;
-    const msg = tx(`Estou usando o Quest Kids para o reforço escolar aqui em casa. Pelo meu link você ganha ${a.desconto_pct}% de desconto: ${link}`, `I use Quest Kids for homework practice at home. With my link you get ${a.desconto_pct}% off: ${link}`);
-    $('#afcopy').onclick = async () => { try { await navigator.clipboard.writeText(link); toast('📋 ' + tx('Copiado!', 'Copied!')); } catch (e) { toast(link, 5000); } };
-    $('#afshare').onclick = async () => { if (navigator.share) { try { await navigator.share({ text: msg }); } catch (e) {} } else window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank'); };
+    const a = d.afiliado; if (!a) return;
+    const links = { pt: location.origin + '/?ref=' + a.codigo, en: location.origin + '/en/?ref=' + a.codigo };
+    const msgs = { pt: `Estou usando o Quest Kids para o reforço escolar aqui em casa. Pelo meu link você ganha ${a.desconto_pct}% de desconto: ${links.pt}`, en: `I use Quest Kids for homework practice at home. With my link you get ${a.desconto_pct}% off: ${links.en}` };
+    [['pt', '#afcopy', '#afshare'], ['en', '#afcopyen', '#afshareen']].forEach(([l, c, sh]) => {
+      $(c).onclick = () => copiar(links[l]);
+      $(sh).onclick = async () => { if (navigator.share) { try { await navigator.share({ text: msgs[l] }); } catch (e) {} } else window.open('https://wa.me/?text=' + encodeURIComponent(msgs[l]), '_blank'); };
+    });
   }
 
+  // todos os endereços, em português e inglês, para não errar ao mandar
+  function linksAdmin(d) {
+    const o = location.origin;
+    const L = [
+      ['🛍️', tx('Site de vendas (página inicial)', 'Sales website (home page)'), o + '/', o + '/en/'],
+      ['✨', tx('Criar conta (teste grátis)', 'Create account (free trial)'), o + '/app/?criar=1&lang=pt', o + '/app/?criar=1&lang=en'],
+      ['🔑', tx('Entrar no app (quem já tem conta)', 'Log in to the app'), o + '/app/?lang=pt', o + '/app/?lang=en'],
+      ['🧪', tx('Demonstração com dados de exemplo (senha dos pais 2026)', 'Demo with sample data (parents password 2026)'), o + '/app/?demo=gabi&lang=pt', o + '/app/?demo=gabi&lang=en'],
+      ['🚪', tx('Sair da demonstração', 'Leave the demo'), o + '/app/?demo=0&lang=pt', o + '/app/?demo=0&lang=en'],
+      ['📜', tx('Termos de Uso', 'Terms of Use'), o + '/termos.html', o + '/termos.html#en'],
+      ['🔒', tx('Política de Privacidade', 'Privacy Policy'), o + '/privacidade.html', o + '/privacidade.html#en']
+    ];
+    (d.afiliados || []).forEach(a => L.push(['🤝', tx('Parceiro ', 'Partner ') + esc(a.codigo) + (a.nome ? ' · ' + esc(a.nome) : '') + ` · ${a.indicados || 0} ${tx('cadastros', 'sign-ups')}`, o + '/?ref=' + a.codigo, o + '/en/?ref=' + a.codigo]));
+    const b = (u, f) => `<div class="flex items-center gap-2 min-w-0"><span class="text-[18px]">${f}</span><code class="flex-1 min-w-0 truncate text-[12px] text-on-surface-variant">${esc(u.replace(/^https?:\/\//, ''))}</code><button data-copy="${esc(u)}" class="shrink-0 h-8 px-3 rounded-lg bg-primary-container text-on-primary text-label-sm">${tx('Copiar', 'Copy')}</button></div>`;
+    return `<div class="space-y-2">${L.map(([ic, t, pt2, en]) => `<div class="border-b border-surface-container-high pb-2"><p class="text-label-md text-on-surface mb-1">${ic} ${t}</p>${b(pt2, '🇧🇷')}${b(en, '🇺🇸')}</div>`).join('')}</div>
+      <details class="bg-surface-container-low rounded-xl p-3"><summary class="text-label-md text-primary cursor-pointer">${tx('Como testar um link de parceiro', 'How to test a partner link')}</summary>
+        <ol class="list-decimal pl-5 mt-2 space-y-1 text-body-sm text-on-surface-variant">
+          <li>${tx('Abra o link do parceiro numa <b>janela anônima</b> (ou outro celular).', 'Open the partner link in a <b>private window</b> (or another phone).')}</li>
+          <li>${tx('Toque em "Começar teste grátis" e crie uma conta com um <b>e-mail novo</b> (que nunca foi usado no app).', 'Tap "Start free trial" and create an account with a <b>new email</b>.')}</li>
+          <li>${tx('Volte aqui: o número de cadastros do parceiro aumenta. Abrir o próprio link na própria conta não conta.', 'Come back here: the partner sign-up count goes up. Opening your own link in your own account does not count.')}</li></ol></details>`;
+  }
   /* ================= painel de gestão (só administradores) ================= */
   async function gestao() {
     const d = await DB.rpc('admin_painel').catch(x => { throw new Error(/admin_painel|function|schema/i.test(x.message) ? tx('Rode o SQL 06 no Supabase para ver o painel.', 'Run SQL 06 in Supabase to see the panel.') : x.message); });
@@ -654,6 +682,9 @@
     const ativos = (d.por_status || {}).active || 0;
     const box = (n, l, sub) => `<div class="${card}"><b class="text-headline-lg-mobile text-on-surface block">${n}</b><span class="text-label-md text-on-surface-variant">${l}</span>${sub ? `<p class="text-body-sm text-on-surface-variant mt-1">${sub}</p>` : ''}</div>`;
     shell(`<div class="space-y-5 max-w-5xl"><div class="flex items-center justify-between gap-2"><h1 class="text-headline-lg-mobile text-on-surface">🛠️ ${tx('Painel de gestão', 'Admin panel')}</h1><button id="gback" class="text-label-md text-primary underline">${tx('Voltar', 'Back')}</button></div>
+      <details class="${card} space-y-3" open><summary class="list-none cursor-pointer"><h2 class="text-headline-md text-on-surface">🔗 ${tx('Links para mandar', 'Links to share')}</h2></summary>
+        <p class="text-body-sm text-on-surface-variant">${tx('Toque em Copiar e cole no WhatsApp ou e-mail. O idioma já vai certo no link.', 'Tap Copy and paste into WhatsApp or email. The language is set in the link.')}</p>
+        ${linksAdmin(d)}</details>
       <h2 class="text-headline-md text-on-surface">${tx('Assinaturas', 'Subscriptions')}</h2>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">${box(d.familias, tx('famílias', 'families'), `+${d.novas7} ${tx('em 7 dias', 'in 7 days')} · +${d.novas30} ${tx('em 30', 'in 30')}`)}${box(ativos, tx('assinantes ativos', 'active subscribers'), Object.entries(d.por_plano || {}).map(([k, n]) => `${k.replace('*', ' (fundador)')}: ${n}`).join(' · ') || '—')}${box((d.por_status || {}).trialing || 0, tx('em teste grátis', 'on free trial'), `${tx('conversão', 'conversion')}: ${d.familias ? Math.round(100 * ativos / d.familias) : 0}%`)}${box(d.cancel30, tx('cancelamentos (30 dias)', 'cancellations (30 days)'), `${tx('atrasados', 'past due')}: ${(d.por_status || {}).past_due || 0}`)}</div>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">${box('R$ ' + mrrB.toFixed(0) + (mrrU ? ' + $' + mrrU.toFixed(0) : ''), tx('receita mensal estimada (MRR)', 'estimated MRR'))}${box('$' + (custo / 100).toFixed(2), tx('custo de IA este mês', 'AI cost this month'), `${(d.ia_mes || {}).paginas || 0} ${tx('páginas', 'pages')} · ${(d.ia_mes || {}).familias || 0} ${tx('famílias', 'families')}`)}${box(ativos ? '$' + (custo / 100 / Math.max(1, ativos)).toFixed(2) : '—', tx('custo de IA por assinante', 'AI cost per subscriber'))}${box(d.licoes30, tx('lições criadas (30 dias)', 'lessons created (30 days)'), Object.entries(d.tarefas || {}).map(([k, n]) => `${k}: ${n}`).join(' · '))}</div>
@@ -679,6 +710,7 @@
         ${btnP('tsave', tx('Publicar tema (1 capítulo)', 'Publish topic (1 chapter)'), 'upload')}</section>
     </div>`);
     $('#gback').onclick = () => { tab = 'conta'; render(); };
+    app().querySelectorAll('[data-copy]').forEach(b => b.onclick = () => copiar(b.dataset.copy));
     const contas = async () => {
       const box2 = $('#clist'); if (!box2) return;
       let cs = []; try { cs = await DB.rpc('admin_contas', { busca: ($('#cbusca').value || '').trim() || null }); } catch (x) { box2.innerHTML = `<p class="text-body-sm text-error">${/admin_contas|function|schema/i.test(x.message) ? tx('Rode o SQL 07 no Supabase.', 'Run SQL 07 in Supabase.') : esc(x.message)}</p>`; return; }

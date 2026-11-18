@@ -142,7 +142,18 @@
       if (!Auth.logged) return authScreen(/[?&]criar/.test(location.search) || savedConv ? 'criar' : 'entrar');
       if (savedConv && !QK.DEMO) { try { localStorage.removeItem('qk.convite'); } catch (e) {} try { await DB.rpc('aceitar_convite', { cod: savedConv }); toast('✅ ' + P('Convite aceito! Você entrou na família.', 'Invite accepted! You joined the family.'), 4000); } catch (x) { toast(inviteErr(x), 5000); } }
       // indicação de parceiro (afiliado/influenciador): registra uma vez
-      try { const rf = localStorage.getItem('qk.ref'); if (rf && !QK.DEMO) DB.rpc('registrar_indicacao', { cod: rf }).then(() => localStorage.removeItem('qk.ref')).catch(() => {}); } catch (e) {}
+      // (o código fica guardado no aparelho e também no cadastro, para funcionar mesmo se o e-mail de confirmação abrir em outro navegador)
+      try {
+        const meta = (Auth.user && Auth.user.user_metadata) || {};
+        const mk = 'qk.refmeta.' + ((Auth.user && Auth.user.id) || '');
+        const rf = localStorage.getItem('qk.ref') || (meta.ref && !localStorage.getItem(mk) ? meta.ref : null);
+        if (rf && !QK.DEMO) DB.rpc('registrar_indicacao', { cod: rf }).then(r => {
+          try { localStorage.removeItem('qk.ref'); localStorage.setItem(mk, '1'); } catch (e) {}
+          if (r === 'proprio') toast(P('🔗 Esse é o seu próprio link de parceiro. Ele só conta quando outra pessoa cria uma conta nova por ele.', '🔗 This is your own partner link. It only counts when someone else creates a new account with it.'), 6000);
+          else if (r === 'codigo') toast(P('🔗 Código de parceiro não encontrado: ' + rf, '🔗 Partner code not found: ' + rf), 5000);
+          else if (r === 'ok' || r === true) toast(P('🎁 Você chegou pelo link de um parceiro. O desconto vale quando escolher o plano.', '🎁 You came through a partner link. The discount applies when you pick a plan.'), 5000);
+        }).catch(() => {});
+      } catch (e) {}
       // convite por e-mail: se alguém convidou este e-mail, entra sozinho na família
       if (!QK.DEMO) await DB.rpc('aceitar_convite_email').then(f => { if (f) toast('✅ ' + P('Você entrou na família que te convidou!', 'You joined the family that invited you!'), 4000); }).catch(() => {});
       await loadFamily();
