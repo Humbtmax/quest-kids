@@ -51,7 +51,7 @@
   .qka-m{max-width:88%;padding:9px 12px;border-radius:16px;background:#fff;border:1px solid #dbe8f6;word-wrap:break-word}
   .qka-m.eu{align-self:flex-end;background:#14a3a3;color:#fff;border-color:#14a3a3;border-bottom-right-radius:6px}.qka-m.ele{align-self:flex-start;border-bottom-left-radius:6px}
   .qka-acts{display:flex;flex-wrap:wrap;gap:6px;align-self:flex-start}.qka-act{border:0;border-radius:12px;background:#14a3a3;color:#fff;font-weight:700;font-size:13px;padding:8px 12px;cursor:pointer}
-  .qka-chips{display:flex;flex-wrap:wrap;gap:6px}.qka-chip{border:1px solid #bfe9e4;background:#e9fbf8;color:#0f1d29;border-radius:999px;padding:6px 10px;font-size:13px;cursor:pointer}
+  .qka-chips{display:flex;flex-wrap:wrap;gap:6px}.qka-chip{border:1px solid #bfe9e4;background:#e9fbf8;color:#0f1d29;border-radius:999px;padding:6px 10px;font-size:13px;cursor:pointer;text-align:left}.qka-chips .qka-outra{background:transparent;border-style:dashed}
   .qka-form{display:flex;gap:6px;padding:10px;border-top:1px solid #dbe8f6}.qka-form textarea{flex:1;resize:none;border:1px solid #cdd9e6;border-radius:14px;padding:9px 10px;font:inherit;height:42px;max-height:100px}
   .qka-form button{border:0;border-radius:14px;background:#14a3a3;color:#fff;font-weight:800;padding:0 14px;cursor:pointer}.qka-form button:disabled{opacity:.5}
   .qka-dots{display:inline-flex;gap:4px}.qka-dots i{width:7px;height:7px;border-radius:50%;background:#6d7a79;animation:qkad 1s infinite}.qka-dots i:nth-child(2){animation-delay:.15s}.qka-dots i:nth-child(3){animation-delay:.3s}
@@ -79,10 +79,25 @@
     box.classList.add('on'); document.getElementById('qka-btn').style.display = 'none';
     if (!list.children.length) {
       add('ele', T('Oi! Eu sou o Quico 👋 Posso tirar suas dúvidas sobre o Quest Kids e te levar até a tela certa. O que você quer saber?', "Hi! I'm Quico 👋 I can answer your questions about Quest Kids and take you to the right screen. What would you like to know?"));
-      const c = document.createElement('div'); c.className = 'qka-chips'; c.innerHTML = SUGEST().map(s => `<button type="button" class="qka-chip">${esc(s)}</button>`).join(''); list.appendChild(c);
-      c.querySelectorAll('button').forEach(x => x.onclick = () => { c.remove(); enviar(x.textContent); });
+      chips(SUGEST(), false);
     }
     setTimeout(() => box.querySelector('textarea').focus(), 50);
+  }
+  // botões para continuar a conversa sem digitar (depois de cada resposta)
+  const feitas = () => hist.filter(h => h.quem === 'pessoa').map(h => h.texto.toLowerCase());
+  function chips(lista, outra) {
+    list.querySelectorAll('.qka-chips').forEach(c => c.remove());
+    const ja = feitas();
+    lista = (lista || []).map(x => String(x).trim()).filter(x => x && x.length <= 80 && !ja.includes(x.toLowerCase())).slice(0, 3);
+    if (outra && lista.length < 2) lista = lista.concat(SUGEST().filter(x => !ja.includes(x.toLowerCase()) && !lista.includes(x))).slice(0, 3);
+    const c = document.createElement('div'); c.className = 'qka-chips';
+    c.innerHTML = lista.map(x => `<button type="button" class="qka-chip">${esc(x)}</button>`).join('') + (outra ? `<button type="button" class="qka-chip qka-outra" data-outra>✏️ ${T('Tenho outra pergunta', 'I have another question')}</button>` : '');
+    list.appendChild(c);
+    c.querySelectorAll('button').forEach(x => x.onclick = () => {
+      if (x.hasAttribute('data-outra')) { c.remove(); const ta = box.querySelector('textarea'); ta.focus(); ta.placeholder = T('Escreva sua pergunta aqui…', 'Type your question here…'); return; }
+      c.remove(); enviar(x.textContent);
+    });
+    list.scrollTop = list.scrollHeight;
   }
   function fechar() { if (!box) return; box.classList.remove('on'); const b = document.getElementById('qka-btn'); if (b) b.style.display = ''; }
   function add(quem, texto, destinos) {
@@ -97,7 +112,7 @@
   // modo demonstração do app: respostas prontas (sem gastar IA)
   function demo(p) {
     const t = p.toLowerCase();
-    if (/material|foto|lição|lesson|photo|send/.test(t)) return { resposta: T('Na **Área dos pais → Material**, tire foto das páginas (ou mande PDF), escolha "Estudo do dia a dia" ou "Cai na prova" e toque em Enviar. Em 2 a 5 minutos vira lição. 📸', 'In **Parents → Material**, snap the pages (or send a PDF), pick "Everyday study" or "On the test" and tap Send. It becomes a lesson in 2–5 minutes. 📸'), destinos: ['material'] };
+    if (/material|foto|lição|lesson|photo|send/.test(t)) return { resposta: T('Na **Área dos pais → Material**, tire foto das páginas (ou mande PDF), escolha "Estudo do dia a dia" ou "Cai na prova" e toque em Enviar. Em 2 a 5 minutos vira lição. 📸 O envio fica **mais para baixo** na aba Material: o botão abaixo já te leva lá.', 'In **Parents → Material**, snap the pages (or send a PDF), pick "Everyday study" or "On the test" and tap Send. It becomes a lesson in 2–5 minutes. 📸 Sending is **further down** the Material tab: the button below takes you there.'), destinos: ['material'], sugestoes: [T('Posso mandar PDF?', 'Can I send a PDF?'), T('Quantas páginas por vez?', 'How many pages at a time?')] };
     if (/simulad|practice|test/.test(t)) return { resposta: T('No **Resumo**, em "Preparar um simulado", escolha quantas perguntas e o tempo. Ele vira a primeira atividade da próxima lição, e o resultado aparece para você primeiro. 🧪', 'In **Summary**, under "Set up a practice test", pick the number of questions and time. It becomes the first activity of the next lesson. 🧪'), destinos: ['simulado'] };
     if (/convid|invite|pai|mãe|parent/.test(t)) return { resposta: T('Em **Conta → Outro responsável**, digite o e-mail dele ou mande o convite pelo WhatsApp. Ele entra na mesma família. 👪', 'In **Account → Another parent**, type their email or send the invite by WhatsApp. 👪'), destinos: ['convite'] };
     return { resposta: T('Esta é a demonstração: no app de verdade eu respondo qualquer dúvida sobre o Quest Kids. 😊', 'This is the demo: in the real app I answer any question about Quest Kids. 😊'), destinos: ['material'] };
@@ -105,6 +120,7 @@
   async function enviar(txt) {
     txt = String(txt || '').trim(); if (!txt || ocupado) return;
     ocupado = true; box.querySelector('.qka-form button').disabled = true;
+    list.querySelectorAll('.qka-chips').forEach(c => c.remove());
     add('eu', txt); hist.push({ quem: 'pessoa', texto: txt });
     const dots = add('ele', ''); dots.innerHTML = '<span class="qka-dots"><i></i><i></i><i></i></span>';
     let r;
@@ -117,6 +133,7 @@
     dots.remove();
     if (!r || !r.resposta) r = { resposta: T('Hmm, não entendi. Pode perguntar de outro jeito?', "Hmm, I didn't get that. Could you ask another way?"), destinos: [] };
     add('ele', r.resposta, r.destinos); hist.push({ quem: 'quico', texto: r.resposta });
+    chips(r.sugestoes, true);
     ocupado = false; box.querySelector('.qka-form button').disabled = false;
   }
   window.QKAjuda = { abrir: () => { montar(); abrir(); }, fechar };

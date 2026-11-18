@@ -541,7 +541,7 @@
     const badge = m => { const t = TIPOS().find(x => x[0] === tipoDe(m)) || TIPOS()[0]; return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-label-sm ${t[0] === 'prova' ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface'}">${t[1]} ${t[2]}${t[0] === 'prova' && m.data_prova ? ' · ' + new Date(m.data_prova + 'T12:00').toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' }) : ''}</span>`; };
     const grupos = lotes(mats);
     shell(`${modoHtml(est.lics, modos, tcfg)}${estudandoHtml(est)}${temasHtml(compras.map(c => c.item), tcfg, tdb, prodTemas)}<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
-      <section class="lg:col-span-3 ${card} space-y-1 relative overflow-hidden">
+      <section id="envio" class="lg:col-span-3 ${card} space-y-1 relative overflow-hidden">
         <div class="absolute -top-10 -right-10 w-36 h-36 bg-primary-container/10 rounded-full blur-2xl pointer-events-none"></div>
         <div class="flex items-center gap-3 relative"><div class="w-12 h-12 rounded-2xl bg-primary-container text-on-primary flex items-center justify-center">${I('photo_camera', 'text-[26px]', 1)}</div>
           <div><h1 class="text-headline-lg-mobile text-on-surface">${tx('Enviar material', 'Send material')}</h1><p class="text-body-sm text-on-surface-variant">${tx('Fotos do caderno, do livro ou o PDF da escola.', 'Photos of the notebook, the book or the school PDF.')}</p></div></div>
@@ -993,7 +993,7 @@
     shell(`<h1 class="text-headline-lg-mobile md:text-headline-lg text-on-surface mb-4">${tx('Conta', 'Account')}</h1>
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
       <div class="lg:col-span-2 space-y-5">
-        <section class="${card} space-y-2"><div class="flex items-center justify-between gap-2"><div><p class="text-label-sm text-on-surface-variant uppercase">${tx('Seu plano', 'Your plan')}</p><b class="text-headline-md text-on-surface">${pnome[s.plano] || s.plano}</b></div><span class="text-label-sm bg-primary/10 text-primary px-2.5 py-1 rounded-full">${esc(stTxt)}</span></div>
+        <section id="planos" class="${card} space-y-2"><div class="flex items-center justify-between gap-2"><div><p class="text-label-sm text-on-surface-variant uppercase">${tx('Seu plano', 'Your plan')}</p><b class="text-headline-md text-on-surface">${pnome[s.plano] || s.plano}</b></div><span class="text-label-sm bg-primary/10 text-primary px-2.5 py-1 rounded-full">${esc(stTxt)}</span></div>
           ${A().trialLeft() !== null ? `<p class="text-body-md text-on-surface-variant">${tx(`Faltam <b class="text-on-surface">${A().trialLeft()} dias</b> de teste grátis. Sem cartão: escolha um plano quando quiser.`, `<b class="text-on-surface">${A().trialLeft()} days</b> of free trial left. No card needed until you pick a plan.`)}</p>` : ''}
           ${s.valido_ate && paying ? `<p class="text-body-sm text-on-surface-variant">${tx('Renova em', 'Renews on')} ${new Date(s.valido_ate).toLocaleDateString(pt() ? 'pt-BR' : 'en-US')}</p>` : ''}
           ${paying ? btnS('portal', tx('Gerenciar assinatura (cartão, trocar ou cancelar)', 'Manage subscription (card, switch or cancel)'), 'credit_card') : ''}</section>
@@ -1072,13 +1072,19 @@
 
   // Quico assistente: leva o pai direto para a tela (e a parte) certa
   function ir(d) {
-    const M = { material: ['material'], modo: ['material', '[data-modo]'], perguntas: ['material', '[data-perg]'], temas: ['material', '[data-tat], #buytemas'], creditos: ['material', '#buycred'],
+    const M = { material: ['material', '#envio'], modo: ['material', '[data-modo]'], perguntas: ['material', '[data-perg]'], temas: ['material', '[data-tat], #buytemas'], creditos: ['material', '#buycred'],
       resumo: ['resumo'], simulado: ['resumo', '#simsave'], corrigir: ['corrigir'], criancas: ['criancas'], nova_crianca: ['criancas', '#novak'], conta: ['conta'],
       planos: ['conta', '#planos, #portal, #assinar'], convite: ['conta', '#ivm'], parceiro: ['conta', '#afc'], pais: ['conta', '[data-pais]'], senha: ['conta', '[data-senha]'] };
     const m = M[d]; if (!m) return;
     if (d === 'nova_crianca') { tab = 'criancas'; newChild(false); return; }
     tab = m[0]; render();
-    if (m[1]) { let n = 0; const t = setInterval(() => { const el = document.querySelector(m[1]); if (el || ++n > 25) { clearInterval(t); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('ring-4', 'ring-secondary-container', 'rounded-xl'); setTimeout(() => el.classList.remove('ring-4', 'ring-secondary-container'), 2600); } } }, 200); }
+    const DICA = { material: tx('Aqui 👇 toque em "Tirar foto" ou "Fotos ou PDF".', 'Here 👇 tap "Take photo" or "Photos or PDF".') };
+    if (m[1]) { let n = 0; const t = setInterval(() => { const el = document.querySelector(m[1]); if (el || ++n > 25) { clearInterval(t); if (el) {
+      // rola até a seção inteira (não só o botão) e destaca, para a pessoa ver exatamente onde está
+      const alvo = el.tagName === 'SECTION' ? el : (el.closest('section') || el);
+      alvo.style.scrollMarginTop = '96px'; alvo.scrollIntoView({ behavior: 'smooth', block: alvo.offsetHeight > innerHeight * 0.7 ? 'start' : 'center' });
+      alvo.classList.add('ring-4', 'ring-secondary-container', 'rounded-xl'); setTimeout(() => alvo.classList.remove('ring-4', 'ring-secondary-container'), 4000);
+      if (DICA[d]) setTimeout(() => toast(DICA[d]), 700); } } }, 200); }
   }
   window.QKParent = { open, newChild, ir };
 })();
