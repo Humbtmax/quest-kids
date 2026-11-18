@@ -2,9 +2,11 @@
 (function () {
   'use strict';
   const C = window.QK_CONFIG || {};
-  const DEMO = !C.SUPABASE_URL || /[?&]demo=(1|gabi)/.test(location.search) || localStorage.getItem('qk.demo') === '1';
-  if (/[?&]demo=1/.test(location.search)) localStorage.setItem('qk.demo', '1');
-  if (/[?&]demo=0/.test(location.search)) localStorage.removeItem('qk.demo');
+  try {
+    if (/[?&]demo=0/.test(location.search)) { localStorage.removeItem('qk.demo'); localStorage.removeItem('qk.sess'); history.replaceState(null, '', location.pathname); }
+    if (/[?&]demo=1/.test(location.search)) localStorage.setItem('qk.demo', '1');
+  } catch (e) {}
+  const DEMO = !C.SUPABASE_URL || /[?&]demo=(1|gabi)/.test(location.search) || (() => { try { return localStorage.getItem('qk.demo') === '1'; } catch (e) { return false; } })();
   // ?demo=gabi → demonstração completa com a Gabi e todas as lições dela (recomeça do zero a cada vez que abrir esse link)
   if (/[?&]demo=gabi/.test(location.search)) {
     const iso = d => new Date(Date.now() - d * 864e5).toISOString(), f = 'fam-demo', k = 'kid-gabi';

@@ -33,7 +33,7 @@
           <div class="flex items-center gap-2 shrink-0"><button id="ptm" title="${A().temaAtual() === 'escuro' ? tx('Modo claro', 'Light mode') : tx('Modo escuro', 'Dark mode')}" class="w-9 h-9 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center">${I(A().temaAtual() === 'escuro' ? 'light_mode' : 'dark_mode', 'text-[20px]', 1)}</button>
           <div class="w-9 h-9 rounded-full bg-primary flex items-center justify-center">${I('person', 'text-on-primary text-[20px]')}</div></div>
         </div></header>
-      <main class="pt-20 pb-32 lg:pb-12 px-margin md:px-margin-tablet max-w-6xl mx-auto">${inner}</main>
+      <main class="pt-20 pb-32 lg:pb-12 px-margin md:px-margin-tablet max-w-6xl mx-auto">${QK.DEMO ? A().demoBar() : ''}${inner}</main>
       ${bare ? '' : `<nav class="lg:hidden fixed bottom-0 inset-x-0 z-40 pb-safe md:bottom-4 md:px-4"><div class="bg-surface/90 backdrop-blur-xl shadow-[0_-4px_16px_rgba(20,163,163,0.06)] md:shadow-lg md:rounded-3xl md:max-w-xl md:mx-auto grid grid-cols-5 h-20 px-1">
         ${tabs.map(([k, i, l]) => `<button data-tab="${k}" class="flex flex-col items-center justify-center gap-1 ${tab === k ? 'text-primary' : 'text-on-surface-variant'}">${I(i, 'text-[24px]', tab === k)}<span class="text-label-sm">${l}</span></button>`).join('')}</div></nav>`}`, stay);
     $('#back').onclick = () => A().backFromParents();

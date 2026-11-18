@@ -148,6 +148,7 @@
     const tl = A.trialLeft();
     view(`<main class="min-h-screen px-margin md:px-margin-tablet py-10 max-w-4xl mx-auto">
       <div class="flex items-center gap-3 mb-8">${logo}<span class="text-headline-md text-on-surface">Quest Kids</span></div>
+      ${QK.DEMO ? demoBar() : ''}
       <h1 class="text-headline-xl-mobile md:text-headline-xl text-on-surface mb-2">${t('quemVaiUsar')}</h1>
       ${tl !== null ? `<div class="inline-flex items-center gap-2 bg-secondary-fixed text-on-secondary-fixed px-4 py-2 rounded-full text-label-md my-3">${I('hourglass_top', 'text-[18px]')} ${P(`Teste grátis: faltam ${tl} dias`, `Free trial: ${tl} days left`)}</div>` : ''}
       ${!A.planOk() ? `<div class="bg-secondary-fixed text-on-secondary-fixed rounded-2xl p-4 my-3 text-label-lg">💛 ${P('O teste grátis acabou. Escolha um plano na Área dos pais para continuar.', 'Your free trial ended. Pick a plan in the Parents area.')}</div>` : ''}
@@ -167,6 +168,9 @@
     const ak = $('#addk'); if (ak) ak.onclick = () => parentGate(() => QKOnboard.start({ first: false }));
   }
   A.picker = picker;
+  // modo demonstração: aviso claro + botão para voltar à conta de verdade
+  function demoBar() { return `<div class="mb-5 bg-secondary-fixed text-on-secondary-fixed rounded-2xl p-3.5 flex items-center gap-3"><span class="text-[22px]">🧪</span><span class="text-label-md flex-1">${P('Modo demonstração: nada aqui vai para a sua conta de verdade.', 'Demo mode: nothing here goes to your real account.')}</span><a href="./?demo=0" class="shrink-0 px-3 h-10 inline-flex items-center rounded-full bg-on-secondary-fixed text-secondary-fixed text-label-md">${P('Sair da demo', 'Exit demo')}</a></div>`; }
+  A.demoBar = demoBar;
 
   /* ---------- atalho 🔒 da criança direto para a senha dos pais ---------- */
   function toParents(resume) {
