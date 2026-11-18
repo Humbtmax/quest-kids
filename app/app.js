@@ -132,11 +132,15 @@
       const r = await Auth.handleRedirect();
       if (r === 'recovery') return authScreen('nova');
       // convite: guarda o código mesmo se a pessoa precisar confirmar o e-mail em outra aba
+      const qref = new URLSearchParams(location.search).get('ref');
+      if (qref) { try { localStorage.setItem('qk.ref', qref.trim().toUpperCase().slice(0, 16)); } catch (e) {} }
       const qconv = new URLSearchParams(location.search).get('convite');
       if (qconv) { try { localStorage.setItem('qk.convite', qconv.trim().toUpperCase()); } catch (e) {} }
       const savedConv = (() => { try { return localStorage.getItem('qk.convite'); } catch (e) { return null; } })();
       if (!Auth.logged) return authScreen(/[?&]criar/.test(location.search) || savedConv ? 'criar' : 'entrar');
       if (savedConv && !QK.DEMO) { try { localStorage.removeItem('qk.convite'); } catch (e) {} try { await DB.rpc('aceitar_convite', { cod: savedConv }); toast('✅ ' + P('Convite aceito! Você entrou na família.', 'Invite accepted! You joined the family.'), 4000); } catch (x) { toast(inviteErr(x), 5000); } }
+      // indicação de parceiro (afiliado/influenciador): registra uma vez
+      try { const rf = localStorage.getItem('qk.ref'); if (rf && !QK.DEMO) DB.rpc('registrar_indicacao', { cod: rf }).then(() => localStorage.removeItem('qk.ref')).catch(() => {}); } catch (e) {}
       // convite por e-mail: se alguém convidou este e-mail, entra sozinho na família
       if (!QK.DEMO) await DB.rpc('aceitar_convite_email').then(f => { if (f) toast('✅ ' + P('Você entrou na família que te convidou!', 'You joined the family that invited you!'), 4000); }).catch(() => {});
       await loadFamily();
@@ -304,6 +308,8 @@
       const [prog, lic, sim] = await Promise.all([DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'main' } }), DB.sel('licoes', { eq: { crianca_id: kid.id }, order: 'criado_em.desc', limit: 60 }), DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'sim' } }).catch(() => [])]);
       A.eng = new QKEngine(kid, prog[0] && prog[0].dados, lic);
       A.simReq = sim[0] && sim[0].dados && !sim[0].dados.feito ? sim[0].dados : null;
+      // temas narrados: grátis + comprados + o que os pais ativaram
+      Promise.all([DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'temas' } }).catch(() => []), DB.sel('compras', { eq: { familia_id: A.fam.id } }).catch(() => []), DB.sel('temas', {}).catch(() => [])]).then(([tp, cp, td]) => { A.temasCfg = (tp[0] && tp[0].dados) || null; A.compras = cp.map(x => x.item); A.temasDB = td; }).catch(() => {});
       if (!prog[0]) A.saveProg(true);
       kidHome();
     } catch (x) { toast(x.message); picker(); }
@@ -413,6 +419,24 @@
   A.kidHome = kidHome;
 
   /* ---------- Biblioteca ---------- */
+  // temas que a criança pode abrir: prontos, grátis ou comprados, e ativados pelos pais (sem configuração = os grátis)
+  function temasKid() {
+    if (!window.QKTemas) return [];
+    const own = A.compras || [], cfg = A.temasCfg, db = (A.temasDB || []).map(t => ({ id: 'DB-' + t.id, icon: t.icone || '🎧', pt: t.titulo, en: t.titulo, pacote: t.pacote || 'gratis', status: 'pronto', idiomas: [t.idioma], db: t }));
+    return QKTemas.CAT.concat(db).filter(t => t.status === 'pronto' && (t.pacote === 'gratis' || own.includes(t.pacote) || own.includes(t.id)) && (cfg && cfg.ativos ? cfg.ativos.includes(t.id) : t.pacote === 'gratis'));
+  }
+  async function temaScreen(t) {
+    if (!t) return;
+    view('<div class="spin"></div>');
+    const caps = await QKTemas.chapters(t); const done = A.eng.prog.completed;
+    view(`${kidHeader(L('Temas', 'Topics'))}${pageMain(`<div class="max-w-xl mx-auto mt-2 space-y-4">
+      <button id="bk" class="inline-flex items-center gap-1 text-label-md text-primary">${I('arrow_back', 'text-[20px]')} ${kt('biblioteca')}</button>
+      <div class="text-center"><div class="text-[60px]">${t.icon}</div><h1 class="text-headline-lg-mobile text-on-surface">${esc(isPt() ? t.pt : t.en)}</h1><p class="text-body-sm text-on-surface-variant">${caps.length} ${L('capítulos narrados', 'narrated chapters')}</p></div>
+      ${caps.map((c, i) => `<button data-cap="${i}" class="w-full text-left bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex items-center gap-3"><span class="w-10 h-10 rounded-full ${done[c.id] ? 'bg-primary-container text-on-primary' : 'bg-surface-container'} flex items-center justify-center text-label-lg">${done[c.id] ? '✓' : i + 1}</span><span class="flex-1"><b class="text-label-lg text-on-surface block">${esc(c.chapterTitle || c.title)}</b><span class="text-body-sm text-on-surface-variant">🎧 ${c.minutes || 5} min</span></span>${I('play_circle', 'text-[30px] text-primary', 1)}</button>`).join('') || `<p class="text-body-md text-on-surface-variant">${L('Em breve!', 'Coming soon!')}</p>`}
+    </div>`)}${kidNav('bib')}`);
+    wireNav(); $('#bk').onclick = () => library();
+    app().querySelectorAll('[data-cap]').forEach(b => b.onclick = () => { if (!A.planOk()) return toast(kt('planoVencido')); runLesson({ reading: A.eng.reading(caps[+b.dataset.cap]) }); });
+  }
   function library(q) {
     const e = A.eng; q = (q || '').toLowerCase();
     const reads = e.doneReadings().reverse().filter(r => !q || r.title.toLowerCase().includes(q));
@@ -436,12 +460,15 @@
             <div class="flex items-center justify-between mt-3 bg-surface-container-low rounded-xl px-3 py-2"><span class="text-body-sm text-on-surface-variant">${c.pct != null ? c.pct + '%' : ''}</span>
               <button data-r="${esc(r.id)}" class="w-9 h-9 rounded-full bg-primary text-on-primary flex items-center justify-center active:scale-90 shadow-sm" aria-label="${kt('lerDeNovo')}">${I('replay', 'text-[20px]')}</button></div></div>`; }).join('')}</div>`
         : `<p class="text-body-md text-on-surface-variant bg-surface-container-low rounded-2xl p-4">${L('As leituras que você terminar aparecem aqui.', 'Readings you finish show up here.')}</p>`}</section>
+      ${temasKid().length ? `<section class="mt-7"><h2 class="text-headline-lg-mobile text-on-surface">🎧 ${L('Temas narrados', 'Narrated topics')}</h2><p class="text-body-sm text-on-surface-variant mb-3">${L('Ouça a história, aprenda palavras novas e responda às perguntas.', 'Listen to the story, learn new words and answer the questions.')}</p>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">${temasKid().map(t => `<button data-tema="${esc(t.id)}" class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm text-left active:scale-95 transition"><div class="text-[36px]">${t.icon}</div><b class="text-label-lg text-on-surface line-clamp-2 mt-1">${esc(isPt() ? t.pt : t.en)}</b>${(t.idiomas || []).length === 1 && t.idiomas[0] === 'en' ? '<span class="text-label-sm text-on-surface-variant">🇺🇸 English</span>' : ''}</button>`).join('')}</div></section>` : ''}
       <section class="mt-7"><h2 class="text-headline-lg-mobile text-on-surface mb-3">${kt('minhasPalavras')} <span class="text-label-md text-on-surface-variant">(${words.length})</span></h2>
         ${words.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">${words.map(([w, x]) => `<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm"><div class="flex items-center justify-between gap-2"><b class="text-label-lg text-on-surface">${esc(w)}</b><span class="flex gap-0.5">${[1, 2, 3, 4, 5, 6].map(i => `<span class="w-1.5 h-1.5 rounded-full ${i <= (x.box || 1) ? 'bg-primary-container' : 'bg-surface-container-high'}"></span>`).join('')}</span></div><p class="text-body-sm text-on-surface-variant mt-1">${esc(e.defs[w] || x.def || '')}</p></div>`).join('')}</div>`
         : `<p class="text-body-md text-on-surface-variant bg-surface-container-low rounded-2xl p-4">${kt('semPalavras')}</p>`}</section>`)}${kidNav('bib')}`);
     wireNav();
     const bs = $('#busca'); bs.onchange = () => library(bs.value); bs.onkeydown = ev => { if (ev.key === 'Enter') library(bs.value); };
     const ler = $('#ler'); if (ler) ler.onclick = () => runLesson({});
+    app().querySelectorAll('[data-tema]').forEach(b => b.onclick = () => temaScreen(temasKid().find(t => t.id === b.dataset.tema)));
     app().querySelectorAll('[data-r]').forEach(b => b.onclick = () => { if (!A.planOk()) return toast(kt('planoVencido')); const it = e.readingList().find(x => x.id === b.dataset.r); runLesson({ reading: e.reading(it), redo: true }); });
   }
 
@@ -789,13 +816,13 @@
       <div class="flex items-center justify-between gap-2 mb-4 flex-wrap">
         <div class="flex items-center gap-2 bg-surface-container-lowest px-3.5 py-2 rounded-xl shadow-sm min-w-0"><span class="text-[20px]">${esc(R.icon || '📖')}</span><span class="text-label-md text-on-surface truncate">${esc(R.title)}</span></div>
         <button id="ouvir" class="flex items-center gap-2 bg-tertiary-container text-on-tertiary-container px-3.5 py-2 rounded-xl text-label-md shadow-sm active:scale-95 ring-tertiary-fixed">${I('volume_up', 'text-[18px]')}<span>${L('Ouvir exemplo', 'Listen')}</span></button></div>
+      ${R.audio && n === 1 ? `<div class="bg-tertiary-fixed/60 rounded-2xl p-4 mb-4 space-y-2"><p class="text-label-lg text-on-surface">🎧 ${L('Ouça a história primeiro', 'Listen to the story first')}</p><audio controls preload="metadata" playsinline src="${esc(R.audio)}" class="w-full"></audio><p class="text-body-sm text-on-surface-variant">${L('Depois leia o resumo e responda às perguntas.', 'Then read the summary and answer the questions.')}</p></div>` : ''}
       <div class="bg-surface-container-lowest rounded-2xl p-5 md:p-6 soft-shadow mb-5 space-y-4">
         <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-primary-container"></span><span class="text-label-sm text-on-surface-variant uppercase tracking-wider">${kt('pagina')} ${n} ${L('de', 'of')} ${R.pages.length}</span></div>
         ${R.wordParts && n === 1 ? `<div class="flex flex-wrap gap-1.5">${R.wordParts.map(w => `<span class="bg-tertiary-fixed text-on-tertiary-fixed px-2.5 py-1 rounded-lg text-label-sm">${esc(w[0])} = ${esc(w[1])}</span>`).join('')}</div>` : ''}
         <div id="psg" class="text-body-lg md:text-[20px] md:leading-[32px] text-on-surface leading-relaxed space-y-3"><p>${md(text)}</p></div>
         <div id="meter"></div>
         ${R.image && n === 1 ? `<div class="w-full h-40 rounded-xl overflow-hidden"><img class="w-full h-full object-cover" src="${esc(R.image)}" alt=""></div>` : ''}
-        ${R.audio && n === 1 ? `<audio controls preload="none" src="${esc(R.audio)}" class="w-full"></audio>` : ''}
         <div class="flex items-center justify-between text-label-sm text-on-surface-variant bg-surface-container-low px-3 py-2 rounded-xl"><span>💡 ${L('Dica: faça uma pausa suave na vírgula!', 'Tip: pause gently at commas!')}</span><span class="text-primary">${words} ${L('palavras', 'words')}</span></div>
       </div>
       ${aloud ? '<div class="h-28"></div>' : ''}

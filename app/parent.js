@@ -52,7 +52,7 @@
   async function open() { tab = 'resumo'; await A().loadFamily().catch(() => {}); kidSel = kidSel && A().kids.find(k => k.id === kidSel) ? kidSel : (A().kids[0] || {}).id; render(); }
   function render() {
     shell('<div class="spin" style="margin-top:20vh"></div>');
-    ({ resumo, corrigir, material, criancas, conta })[tab]().catch(x => shell(`<div class="${card}"><p class="text-body-md">😕 ${esc(x.message)}</p></div>`));
+    ({ resumo, corrigir, material, criancas, conta, gestao })[tab]().catch(x => shell(`<div class="${card}"><p class="text-body-md">😕 ${esc(x.message)}</p></div>`));
   }
 
   /* ================= resumo ================= */
@@ -73,6 +73,8 @@
     const kid = A().kids.find(k => k.id === kidSel); if (!kid) return newChild(true);
     const N = periodo, fim = today(), ini = addDays(fim, -(N - 1)), pfim = addDays(ini, -1), pini = addDays(pfim, -(N - 1));
     const [pr, ts, lics, simR] = await Promise.all([DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'main' } }), DB.sel('tentativas', { eq: { crianca_id: kid.id }, gte: { iniciada_em: addDays(today(), -Math.max(2 * N, 60)) }, order: 'iniciada_em.desc', limit: 500 }), DB.sel('licoes', { eq: { crianca_id: kid.id }, order: 'criado_em.desc', limit: 60 }).catch(() => []), DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'sim' } }).catch(() => [])]);
+    const fbs = await DB.sel('feedback_prova', { eq: { crianca_id: kid.id } }).catch(() => null);
+    const provaPassou = fbs === null ? null : lics.find(l => l.conteudo && l.conteudo.modo_prova && l.conteudo.data_prova && l.conteudo.data_prova < today() && l.conteudo.data_prova >= addDays(today(), -30) && !fbs.some(f => f.licao_id === l.id));
     const p = (pr[0] && pr[0].dados) || {}; const dias = p.dias || {}; const goal = kid.minutos || 15, steps = Math.min(40, Math.round(goal * 0.6 + 4));
     const plan = []; for (let d = ini; d <= fim; d = addDays(d, 1)) if ((kid.dias || [1, 2, 3, 4, 5]).includes(new Date(d + 'T12:00').getDay())) plan.push(d);
     const M = metr(p, ts, ini, fim, goal, steps), Pv = metr(p, ts, pini, pfim, goal, steps);
@@ -114,6 +116,11 @@
         ${kidSwitcher(kid)}</section>
       ${tl !== null ? `<button id="toplan" class="w-full text-left bg-secondary-fixed text-on-secondary-fixed rounded-2xl p-3.5 flex items-center gap-3">${I('hourglass_top', 'text-[22px]')}<span class="text-label-md flex-1">${tx(`Teste grátis: faltam ${tl} dias.`, `Free trial: ${tl} days left.`)}</span><span class="text-label-md underline">${tx('Ver planos', 'See plans')}</span></button>` : ''}
       ${pend ? `<button data-go="corrigir" class="w-full text-left bg-secondary-fixed/60 text-on-secondary-fixed rounded-2xl p-3.5 flex items-center gap-3">${I('rate_review', 'text-[22px]')}<span class="text-label-md">${pend} ${pend === 1 ? tx('item esperando sua correção', 'item waiting for your review') : tx('itens esperando sua correção', 'items waiting for your review')}</span></button>` : ''}
+      ${provaPassou ? `<section class="${card} space-y-3 ring-2 ring-secondary-container"><h2 class="text-headline-md text-on-surface">🎓 ${tx(`Como foi a prova de ${esc(provaPassou.titulo || '')}?`, `How did the ${esc(provaPassou.titulo || '')} test go?`)}</h2>
+        <p class="text-body-sm text-on-surface-variant">${tx(`A prova foi em ${fmtD(provaPassou.conteudo.data_prova)}. Conte a nota para acompanharmos se o estudo está funcionando.`, `The test was on ${fmtD(provaPassou.conteudo.data_prova)}. Share the grade so we can see if the practice is working.`)}</p>
+        <div class="grid grid-cols-3 gap-2"><label class="text-label-sm text-on-surface-variant">${tx('Nota (0 a 10)', 'Grade (0–10)')}<input id="fbn" type="number" min="0" max="10" step="0.1" inputmode="decimal" class="${inputCls} mt-1"></label><label class="col-span-2 text-label-sm text-on-surface-variant">${tx('Comentário (opcional)', 'Comment (optional)')}<input id="fbc" maxlength="600" class="${inputCls} mt-1" placeholder="${tx('Ex.: tirou a melhor nota do ano!', 'E.g. best grade of the year!')}"></label></div>
+        <label class="flex items-start gap-2 text-body-sm text-on-surface"><input id="fba" type="checkbox" class="mt-0.5 w-5 h-5"> ${tx('Autorizo o Quest Kids a usar meu comentário como depoimento (sem o nome da criança).', 'I allow Quest Kids to use my comment as a testimonial (without the child’s name).')}</label>
+        <div class="grid grid-cols-2 gap-2"><button id="fbsave" class="h-11 rounded-xl bg-primary-container text-on-primary text-label-md">${tx('Enviar', 'Send')}</button><button id="fbrel" class="h-11 rounded-xl bg-surface-container text-on-surface text-label-md">📊 ${tx('Relatório até a prova', 'Report up to the test')}</button></div></section>` : ''}
       <div class="flex items-center justify-between gap-2 flex-wrap"><h2 class="text-headline-md text-on-surface">${tx('Como está indo', 'How it is going')}</h2>${seg([['7', tx('Semana', 'Week')], ['30', tx('Mês', 'Month')], ['90', tx('Trimestre', 'Quarter')]], String(N), 'data-per')}</div>
       <p class="text-body-sm text-on-surface-variant -mt-3">${tx(`Comparando ${fmtD(ini)}–${fmtD(fim)} com o período anterior (${fmtD(pini)}–${fmtD(pfim)}).`, `Comparing ${fmtD(ini)}–${fmtD(fim)} with the previous period (${fmtD(pini)}–${fmtD(pfim)}).`)}</p>
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -167,6 +174,10 @@
     app().querySelectorAll('[data-per]').forEach(b => b.onclick = () => { periodo = +b.dataset.per; render(); });
     app().querySelectorAll('[data-info]').forEach(b => b.onclick = () => { const t2 = app().querySelector(`[data-infotxt="${b.dataset.info}"]`); if (t2) t2.classList.toggle('hidden'); });
     $('#mais').onclick = () => { maisGraf = !maisGraf; render(); };
+    if (provaPassou) {
+      $('#fbsave').onclick = async () => { const n = parseFloat(String($('#fbn').value).replace(',', '.')); if (isNaN(n) || n < 0 || n > 10) return toast(tx('Coloque a nota de 0 a 10.', 'Enter a grade from 0 to 10.')); try { await DB.ins('feedback_prova', { familia_id: A().fam.id, crianca_id: kid.id, licao_id: provaPassou.id, materia: provaPassou.titulo, nota: n, comentario: $('#fbc').value.trim() || null, autoriza_depoimento: $('#fba').checked }); toast('💛 ' + tx('Obrigada por contar!', 'Thanks for sharing!')); render(); } catch (x) { toast(x.message); } };
+      $('#fbrel').onclick = () => { const dd = Math.ceil((new Date(provaPassou.conteudo.data_prova) - new Date(provaPassou.criado_em)) / 864e5) + 1; periodo = dd <= 10 ? 7 : dd <= 40 ? 30 : 90; maisGraf = true; render(); };
+    }
     $('#rcopy').onclick = async () => { try { await navigator.clipboard.writeText(texto); toast('📋 ' + tx('Copiado!', 'Copied!')); } catch (e) { const r = document.createRange(); r.selectNodeContents($('#rtxt')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); toast(tx('Texto selecionado: toque em Copiar.', 'Text selected: tap Copy.')); } };
     $('#rshare').onclick = async () => { if (navigator.share) { try { await navigator.share({ title: 'Quest Kids', text: texto }); } catch (e) {} } else window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank'); };
     $('#rmail').onclick = () => { location.href = 'mailto:?subject=' + encodeURIComponent(tx(`Relatório Quest Kids — ${nm}`, `Quest Kids report — ${nm}`)) + '&body=' + encodeURIComponent(texto); };
@@ -269,6 +280,30 @@
     });
   }
 
+  /* ================= temas narrados (modo férias) ================= */
+  const temasCat = tdb => (window.QKTemas ? QKTemas.CAT : []).concat((tdb || []).map(t => ({ id: 'DB-' + t.id, icon: t.icone || '🎧', pt: t.titulo, en: t.titulo, pacote: t.pacote || 'gratis', status: 'pronto', idiomas: [t.idioma], faixas: [t.faixa] })));
+  async function comprar(codigo, btn) {
+    if (btn) btn.disabled = true;
+    try { const r = await DB.fn('checkout', { codigo, volta: location.origin + location.pathname }); location.href = r.url; }
+    catch (x) { toast(/indispon|unavailable/i.test(x.message) ? tx('Compra ainda não liberada. Em breve!', 'Purchases not open yet. Coming soon!') : x.message, 4000); if (btn) btn.disabled = false; }
+  }
+  function temasHtml(own, tcfg, tdb, prodTemas) {
+    const cat = temasCat(tdb), temPack = own.includes('ferias1');
+    const badge = t => t.status !== 'pronto' ? `<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-[11px]">${tx('Em breve', 'Soon')}</span>` : t.pacote === 'gratis' ? `<span class="px-2 py-0.5 rounded-full bg-primary-container text-on-primary text-[11px]">${tx('Grátis', 'Free')}</span>` : t.pacote === 'ferias1' ? `<span class="px-2 py-0.5 rounded-full ${temPack ? 'bg-primary/15 text-primary' : 'bg-secondary-fixed text-on-secondary-fixed'} text-[11px]">${temPack ? tx('Seu', 'Yours') : tx('Pacote Férias', 'Holiday pack')}</span>` : `<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-[11px]">${tx('Extra', 'Extra')}</span>`;
+    const pode = t => t.status === 'pronto' && (t.pacote === 'gratis' || own.includes(t.pacote) || own.includes(t.id));
+    const ativo = (k, t) => { const r = tcfg.find(x => x.crianca_id === k.id); return r && r.dados && r.dados.ativos ? r.dados.ativos.includes(t.id) : t.pacote === 'gratis'; };
+    return `<section class="${card} mb-6 space-y-3">
+      <div class="flex items-start justify-between gap-2 flex-wrap"><div><h2 class="text-headline-md text-on-surface">🎧 ${tx('Temas narrados · modo férias', 'Narrated topics · holiday mode')}</h2>
+        <p class="text-body-sm text-on-surface-variant">${tx('Histórias faladas com palavras novas e perguntas, para estudar o ano todo e nas férias. 2 vêm grátis; o Pacote Férias traz 10 temas (escolhidos de uma lista de 20+).', 'Spoken stories with new words and questions, for the whole year and holidays. 2 are free; the Holiday Pack brings 10 topics (from a list of 20+).')}</p></div>
+        ${!temPack && prodTemas ? `<button id="buytemas" class="h-11 px-4 rounded-xl bg-secondary-container text-on-secondary-container text-label-md">🏖️ ${tx('Pacote Férias', 'Holiday Pack')} · ${esc(prodTemas.valor_texto)}</button>` : ''}</div>
+      <div class="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-1 px-1">${cat.map(t => `<div class="min-w-[170px] max-w-[170px] rounded-2xl bg-surface-container-low p-3 flex flex-col gap-1.5 ${t.status !== 'pronto' ? 'opacity-60' : ''}">
+        <div class="flex items-center justify-between"><span class="text-[30px]">${t.icon}</span>${badge(t)}</div>
+        <b class="text-label-md text-on-surface leading-tight line-clamp-3">${esc(pt() ? t.pt : t.en)}</b>
+        <span class="text-[11px] text-on-surface-variant">${(t.faixas || []).map(f => f + ' ' + tx('anos', 'yrs')).join(' · ')}${(t.idiomas || []).length ? ' · ' + t.idiomas.map(l => l === 'en' ? '🇺🇸' : '🇧🇷').join('') : ''}</span>
+        ${pode(t) ? A().kids.map(k => `<button data-tat="${k.id}|${esc(t.id)}" class="mt-auto h-9 rounded-lg text-label-sm ${ativo(k, t) ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface'}">${ativo(k, t) ? '✓ ' : '+ '}${esc(k.avatar)} ${esc(k.apelido)}</button>`).join('') : ''}</div>`).join('')}</div>
+      <p class="text-body-sm text-on-surface-variant">${tx('Toque no nome da criança para ativar ou desativar o tema na Biblioteca dela. Cada tema terá duas versões de áudio: 6–9 e 10–14 anos.', "Tap a child's name to turn the topic on or off in their Library. Each topic will have two audio versions: ages 6–9 and 10–14.")}</p></section>`;
+  }
+
   /* ================= o que está sendo estudado agora ================= */
   const AT = q => QKEngine.prototype.answerText.call({}, q);
   // instancia um exemplo de pergunta com números variáveis (para os pais verem)
@@ -302,7 +337,9 @@
     const byKid = A().kids.map(k => ({ k, ls: lics.filter(l => l.crianca_id === k.id) })).filter(x => x.ls.length);
     return `<section class="mb-6 space-y-3"><div class="flex items-center justify-between gap-2"><h2 class="text-headline-md text-on-surface">${I('auto_awesome', 'text-[22px] text-primary align-middle')} ${tx('O que está sendo estudado', 'What is being studied')}</h2></div>
       ${byKid.map(({ k, ls }) => { const pr = ((progs.find(p => p.crianca_id === k.id) || {}).dados) || {}, qn = pr.qn || {};
-        return `<div class="space-y-3"><div class="flex items-center justify-between gap-2"><span class="text-label-lg text-on-surface">${esc(k.avatar)} ${esc(k.apelido)}</span><button data-zerar="${k.id}" class="text-label-sm text-error underline">${tx('Zerar todas as matérias', 'Clear all subjects')}</button></div>
+        return `<div class="space-y-3"><div class="flex items-center justify-between gap-2"><span class="text-label-lg text-on-surface">${esc(k.avatar)} ${esc(k.apelido)}</span><span class="flex gap-3"><button data-todas="${k.id}|ativar" class="text-label-sm text-primary underline">${tx('Ativar todas', 'Turn all on')}</button><button data-todas="${k.id}|pausar" class="text-label-sm text-on-surface-variant underline">${tx('Pausar todas', 'Pause all')}</button><button data-zerar="${k.id}" class="text-label-sm text-error underline">${tx('Apagar todas', 'Delete all')}</button></span></div>
+        <div class="flex items-center justify-between gap-2 bg-surface-container-low rounded-xl px-3 py-2"><span class="text-body-sm text-on-surface">${tx('Divisão do tempo', 'Time split')}: 📖 ${((k.pilares || {}).leitura) || 40}% · 🔤 ${((k.pilares || {}).palavras) || 25}% · 🧮 ${((k.pilares || {}).reforco) || 35}%</span><button data-edk="${k.id}" class="text-label-sm text-primary underline">${tx('Mudar', 'Change')}</button></div>
+        <p class="text-body-sm text-on-surface-variant">${tx('Só as matérias ativas caem nas lições. Ex.: ative só a matéria da semana e, no fim do mês, ative todas para revisar para a prova.', 'Only active subjects show up in lessons. E.g. turn on only this week’s subject and, at month end, turn all on to review for the test.')}</p>
         ${ls.map(l => { const c = l.conteudo || {}, qs = (c.questions || []), lid = l.id, seen = qs.reduce((a, q) => a + (qn[q.id] || 0), 0), vistos = qs.filter(q => qn[q.id]).length;
           const its = ts.filter(t => t.crianca_id === k.id).flatMap(t => t.itens || []).filter(i => String(i.qid).replace(/^TV:/, '').startsWith(lid + '-') && i.correct !== null && i.correct !== undefined);
           const acc = its.length ? Math.round(100 * its.filter(i => i.correct).length / its.length) : null;
@@ -361,15 +398,20 @@
   async function material() {
     if (!A().kids.length) return newChild(true);
     const fam = A().fam.id; const mes = today().slice(0, 7);
-    const [mats, lim, est] = await Promise.all([DB.sel('materiais', { eq: { familia_id: fam }, order: 'criado_em.desc', limit: 80 }), DB.sel('limites_ia', { eq: { plano: (A().sub || {}).plano || 'teste' } }).catch(() => []), estudandoData()]);
+    const moeda = (A().sub && A().sub.moeda) || (pt() ? 'brl' : 'usd');
+    const [mats, lim, est, cred, prods, compras, tcfg, tdb] = await Promise.all([DB.sel('materiais', { eq: { familia_id: fam }, order: 'criado_em.desc', limit: 80 }), DB.sel('limites_ia', { eq: { plano: (A().sub || {}).plano || 'teste' } }).catch(() => []), estudandoData(),
+      DB.sel('creditos', { eq: { familia_id: fam } }).catch(() => []), DB.sel('produtos', { eq: { moeda } }).catch(() => []), DB.sel('compras', { eq: { familia_id: fam } }).catch(() => []),
+      DB.sel('progresso', { inn: { crianca_id: A().kids.map(k => k.id) }, eq: { chave: 'temas' } }).catch(() => []), DB.sel('temas', {}).catch(() => [])]);
+    const creditos = (cred[0] && cred[0].paginas) || 0, prodCred = prods.find(p2 => p2.tipo === 'creditos'), prodTemas = prods.find(p2 => p2.tipo === 'temas');
+    if (creditos > 0 && mats.some(m => m.status === 'sem_limite')) { DB.rpc('reprocessar_sem_limite').then(() => DB.fn('ia', {})).catch(() => {}); }
     const usado = mats.filter(m => String(m.criado_em).slice(0, 7) === mes).length; const max = (lim[0] && lim[0].paginas_mes) || 60;
     let files = [], tipo = 'estudo';
     const kidOf = id => A().kids.find(k => k.id === id);
-    const status = { enviado: ['hourglass_top', tx('Na fila: a IA vai criar as lições', 'In line: AI will create the lessons'), 'text-secondary'], processando: ['auto_awesome', tx('Criando as lições…', 'Creating lessons…'), 'text-tertiary'], pronto: ['check_circle', tx('Lições prontas · fotos apagadas', 'Lessons ready · photos deleted'), 'text-primary'], erro: ['error', tx('Não deu certo. Fotos guardadas até 7 dias para tentar de novo.', 'Something went wrong. Photos kept up to 7 days to retry.'), 'text-error'], apagado: ['delete', tx('Fotos apagadas', 'Photos deleted'), 'text-outline'] };
+    const status = { enviado: ['hourglass_top', tx('Na fila: a IA vai criar as lições', 'In line: AI will create the lessons'), 'text-secondary'], processando: ['auto_awesome', tx('Criando as lições…', 'Creating lessons…'), 'text-tertiary'], pronto: ['check_circle', tx('Lições prontas · fotos apagadas', 'Lessons ready · photos deleted'), 'text-primary'], sem_limite: ['block', tx('Parado: limite de páginas do mês. Compre créditos para continuar.', 'Paused: monthly page limit. Buy credits to continue.'), 'text-error'], erro: ['error', tx('Não deu certo. Fotos guardadas até 7 dias para tentar de novo.', 'Something went wrong. Photos kept up to 7 days to retry.'), 'text-error'], apagado: ['delete', tx('Fotos apagadas', 'Photos deleted'), 'text-outline'] };
     const tipoDe = m => m.tipo || (m.modo_prova ? 'prova' : 'estudo');
     const badge = m => { const t = TIPOS().find(x => x[0] === tipoDe(m)) || TIPOS()[0]; return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-label-sm ${t[0] === 'prova' ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface'}">${t[1]} ${t[2]}${t[0] === 'prova' && m.data_prova ? ' · ' + new Date(m.data_prova + 'T12:00').toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' }) : ''}</span>`; };
     const grupos = lotes(mats);
-    shell(`${estudandoHtml(est)}<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+    shell(`${estudandoHtml(est)}${temasHtml(compras.map(c => c.item), tcfg, tdb, prodTemas)}<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
       <section class="lg:col-span-3 ${card} space-y-1 relative overflow-hidden">
         <div class="absolute -top-10 -right-10 w-36 h-36 bg-primary-container/10 rounded-full blur-2xl pointer-events-none"></div>
         <div class="flex items-center gap-3 relative"><div class="w-12 h-12 rounded-2xl bg-primary-container text-on-primary flex items-center justify-center">${I('photo_camera', 'text-[26px]', 1)}</div>
@@ -390,7 +432,9 @@
           <p class="flex items-start gap-2">${I('menu_book', 'text-[18px] text-primary shrink-0')}<span>${tx('Envie só as páginas que seu filho está estudando agora, para uso da sua família. Não envie livros inteiros. O Quest Kids não copia o texto: cria perguntas e textos novos a partir do conteúdo.', 'Send only the pages your child is studying now, for your family’s use. Do not send whole books. Quest Kids does not copy the text: it creates new questions and texts from the content.')}</span></p></div>
         <div id="err" class="text-label-md text-error min-h-[1.2em] mt-2"></div>
         ${btnP('send', tx('Enviar', 'Send'), 'send')}
-        <p class="text-label-sm text-on-surface-variant text-center mt-2">${tx(`Este mês: ${usado} de ${max} páginas.`, `This month: ${usado} of ${max} pages.`)}</p>
+        <div class="mt-3 bg-surface-container-low rounded-2xl p-3 space-y-2"><div class="flex justify-between text-label-sm text-on-surface-variant"><span>${tx('Páginas este mês (família toda)', 'Pages this month (whole family)')}</span><span class="${usado >= max ? 'text-error' : 'text-on-surface'}">${usado} / ${max}${creditos ? ` · +${creditos} ${tx('créditos', 'credits')}` : ''}</span></div>
+          <div class="h-2 bg-surface-container-high rounded-full overflow-hidden"><div class="h-full ${usado >= max ? 'bg-error' : 'bg-primary-container'} rounded-full" style="width:${Math.min(100, Math.round(100 * usado / Math.max(1, max)))}%"></div></div>
+          ${prodCred ? `<button id="buycred" class="w-full h-11 rounded-xl ${usado >= max ? 'bg-primary-container text-on-primary' : 'bg-surface-container text-on-surface'} text-label-md">➕ ${tx(`Comprar +${prodCred.paginas} páginas`, `Buy +${prodCred.paginas} pages`)} · ${esc(prodCred.valor_texto)}</button>` : ''}</div>
       </section>
       <section class="lg:col-span-2 space-y-3"><h2 class="text-headline-md text-on-surface">${tx('Enviados', 'Sent')}</h2>
         ${grupos.map((g, gi) => { const st = status[g.itens.some(m => m.status === 'erro') ? 'erro' : g.status] || ['help', g.status, 'text-outline']; const k = kidOf(g.crianca_id); return `<button data-g="${gi}" class="${card} w-full text-left space-y-1.5 hover:ring-2 hover:ring-primary-container/40">
@@ -410,14 +454,25 @@
       tipo = b.dataset.tipo; $('#pv').classList.toggle('hidden', tipo !== 'prova');
       app().querySelectorAll('[data-tipo]').forEach(x => { const on = x.dataset.tipo === tipo; x.classList.toggle('border-primary-container', on); x.classList.toggle('bg-primary-fixed/30', on); x.classList.toggle('border-surface-container-high', !on); x.classList.toggle('bg-surface-container-lowest', !on); });
     });
-    app().querySelectorAll('[data-g]').forEach(b => b.onclick = () => verEnvio(grupos[+b.dataset.g], badge, status));
+    app().querySelectorAll('[data-g]').forEach(b => b.onclick = () => { const g = grupos[+b.dataset.g]; const tk = est.tasks.find(t => (t.entrada && t.entrada.materiais || []).some(id => g.itens.some(m => m.id === id))); const l = tk && tk.resultado && est.lics.find(x => x.id === tk.resultado.licao); verEnvio(g, badge, status, l ? () => perguntasSheet(l, ((est.progs.find(p2 => p2.crianca_id === l.crianca_id) || {}).dados) || {}, est.ts.filter(t => t.crianca_id === l.crianca_id)) : null); });
+    const bc = $('#buycred'); if (bc) bc.onclick = () => comprar(prodCred.codigo, bc);
+    const bt = $('#buytemas'); if (bt) bt.onclick = () => comprar(prodTemas.codigo, bt);
+    app().querySelectorAll('[data-tat]').forEach(b => b.onclick = async () => {
+      const [kidId, tid] = b.dataset.tat.split('|'); const row = tcfg.find(r => r.crianca_id === kidId); const own = compras.map(c => c.item);
+      const all = temasCat(tdb).filter(t => t.status === 'pronto' && (t.pacote === 'gratis' || own.includes(t.pacote) || own.includes(t.id)));
+      let ativos = row && row.dados && row.dados.ativos ? row.dados.ativos.slice() : all.filter(t => t.pacote === 'gratis').map(t => t.id);
+      ativos = ativos.includes(tid) ? ativos.filter(x => x !== tid) : ativos.concat(tid);
+      try { await DB.ins('progresso', { crianca_id: kidId, chave: 'temas', dados: { ativos }, atualizado_em: new Date().toISOString() }, { upsert: true, onConflict: 'crianca_id,chave' }); material(); } catch (x) { toast(x.message); }
+    });
     app().querySelectorAll('[data-perg]').forEach(b => b.onclick = () => { const [kid, lid] = b.dataset.perg.split('|'); const l = est.lics.find(x => x.id === lid && x.crianca_id === kid); perguntasSheet(l, ((est.progs.find(p => p.crianca_id === kid) || {}).dados) || {}, est.ts.filter(t => t.crianca_id === kid)); });
     const acao = async (kid, lid, ac) => { try { await DB.rpc('gerir_licao', { crianca: kid, licao: lid, acao: ac }); toast('✅'); material(); } catch (x) { toast(/gerir_licao|function|schema/i.test(x.message) ? tx('Falta rodar o SQL 06 no Supabase para usar isso.', 'Run SQL 06 in Supabase to use this.') : x.message, 4500); } };
     app().querySelectorAll('[data-lacao]').forEach(b => b.onclick = () => { const [kid, lid, ac] = b.dataset.lacao.split('|'); if (ac === 'apagar' && !confirm(tx('Apagar esta matéria e todas as perguntas dela? Não dá para desfazer.', 'Delete this subject and all its questions? This cannot be undone.'))) return; acao(kid, lid, ac); });
+    app().querySelectorAll('[data-todas]').forEach(b => b.onclick = async () => { const [kid, ac] = b.dataset.todas.split('|'); try { for (const l of est.lics.filter(x => x.crianca_id === kid && !!x.pausada === (ac === 'ativar'))) await DB.rpc('gerir_licao', { crianca: kid, licao: l.id, acao: ac }); toast('✅'); material(); } catch (x) { toast(/gerir_licao|function|schema/i.test(x.message) ? tx('Falta rodar o SQL 06 no Supabase para usar isso.', 'Run SQL 06 in Supabase to use this.') : x.message, 4500); } });
+    app().querySelectorAll('[data-edk]').forEach(b => b.onclick = () => { const k = A().kids.find(x => x.id === b.dataset.edk); if (k) { tab = 'criancas'; childForm(k); } });
     app().querySelectorAll('[data-zerar]').forEach(b => b.onclick = () => { if (!confirm(tx('Apagar TODAS as matérias e perguntas desta criança? Não dá para desfazer.', "Delete ALL of this child's subjects and questions? This cannot be undone."))) return; acao(b.dataset.zerar, '', 'zerar'); });
     $('#send').onclick = async () => {
       const err = $('#err'); err.textContent = '';
-      if (usado + files.length > max) { err.textContent = tx(`Limite do mês: ${max} páginas.`, `Monthly limit: ${max} pages.`); return; }
+      if (usado + files.length > max + creditos) { err.innerHTML = tx(`Limite do mês: ${max} páginas (a família toda)${creditos ? ` + ${creditos} de créditos` : ''}. Compre mais créditos abaixo para continuar.`, `Monthly limit: ${max} pages (whole family)${creditos ? ` + ${creditos} credits` : ''}. Buy credits below to continue.`); return; }
       if (files.find(f => f.size > 50 * 1024 * 1024)) { err.textContent = tx('Cada arquivo pode ter até 50 MB.', 'Each file can be up to 50 MB.'); return; }
       const prova = tipo === 'prova', dp = $('#dp').value; if (prova && !dp) { err.textContent = tx('Escolha a data da prova.', 'Pick the test date.'); return; }
       const b = $('#send'); b.disabled = true; const kid = (app().querySelector('input[name=kid]:checked') || {}).value || kidSel, materia = $('#mat').value.trim(), obs = $('#obs').value.trim(); const ids = []; const lote = QK.uid();
@@ -436,7 +491,7 @@
     };
   }
   // ver um envio: fotos (se ainda existirem) e a observação
-  async function verEnvio(g, badge, status) {
+  async function verEnvio(g, badge, status, verPerg) {
     const k = A().kids.find(k => k.id === g.crianca_id);
     const ov = document.createElement('div');
     ov.className = 'fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-6';
@@ -450,6 +505,7 @@
     document.body.appendChild(ov);
     const close = () => ov.remove();
     ov.onclick = e => { if (e.target === ov || e.target.closest('[data-x]')) close(); };
+    if (verPerg) { const b = document.createElement('button'); b.className = 'w-full h-12 rounded-xl bg-primary-container text-on-primary text-label-lg'; b.textContent = tx('📋 Ver todas as perguntas e respostas', '📋 See all questions and answers'); b.onclick = () => { close(); verPerg(); }; ov.firstElementChild.insertBefore(b, ov.querySelector('[data-fotos]')); }
     const box = ov.querySelector('[data-fotos]');
     const vivos = g.itens.filter(m => !['pronto', 'apagado'].includes(m.status));
     if (!vivos.length) { box.innerHTML = `<p class="col-span-2 text-body-sm text-on-surface-variant">${I('delete', 'text-[18px] align-middle')} ${tx('As fotos já foram apagadas, como prometido. As lições continuam no app.', 'Photos were already deleted, as promised. The lessons stay in the app.')}</p>`; return; }
@@ -547,8 +603,89 @@
   }
 
   /* ================= conta e assinatura ================= */
+  /* ================= parceiros: indique e ganhe / influenciadores ================= */
+  const money = (c, m) => (String(m).toLowerCase() === 'usd' ? '$' : 'R$ ') + (c / 100).toFixed(2).replace('.', String(m).toLowerCase() === 'usd' ? '.' : ',');
+  function parceiroHtml(d) {
+    const a = d.afiliado, cfg = d.config || { pote: 30, max_desconto: 20, meses: 12 }, des = a ? a.desconto_pct : Math.min(10, cfg.max_desconto);
+    const link = a ? location.origin + '/?ref=' + a.codigo : '';
+    return `<section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('handshake', 'text-primary')} ${tx('Indique e ganhe', 'Refer and earn')}</h2>
+      <p class="text-body-sm text-on-surface-variant">${tx(`Para pais e influenciadores. Você tem ${cfg.pote}% para dividir como quiser: desconto para quem assinar pelo seu link e comissão para você, por ${cfg.meses} meses de cada assinatura.`, `For parents and influencers. You get ${cfg.pote}% to split as you like: a discount for people who subscribe with your link and a commission for you, for ${cfg.meses} months of each subscription.`)}</p>
+      ${lbl(tx('Seu código (aparece no link e no cupom)', 'Your code (in the link and coupon)'))}<input id="afc" class="${inputCls} uppercase tracking-widest" maxlength="16" value="${esc(a ? a.codigo : '')}" placeholder="${tx('EX.: PAULA10', 'E.G. PAULA10')}">
+      ${lbl(tx('Nome que aparece', 'Display name'))}<input id="afn" class="${inputCls}" maxlength="60" value="${esc(a ? a.nome || '' : '')}">
+      ${lbl(`${tx('Desconto para quem assinar', 'Discount for new subscribers')}: <b id="afdv">${des}%</b> · ${tx('sua comissão', 'your commission')}: <b id="afcv">${cfg.pote - des}%</b>`)}
+      <input id="afd" type="range" min="0" max="${cfg.max_desconto}" step="5" value="${des}">
+      <p class="text-body-sm text-on-surface-variant" id="afx"></p>
+      ${lbl(tx('Chave PIX para receber (ou e-mail do PayPal fora do Brasil)', 'PIX key to get paid (or PayPal email outside Brazil)'))}<input id="afp" class="${inputCls}" maxlength="120" value="${esc(a ? a.pix || '' : '')}">
+      ${btnP('afs', a ? tx('Salvar', 'Save') : tx('Quero ser parceiro', 'Become a partner'), 'check')}
+      ${a ? `<div class="bg-surface-container-low rounded-2xl p-3 space-y-2"><p class="text-label-sm text-on-surface-variant">${tx('Seu link', 'Your link')}</p><p class="text-body-md text-on-surface break-all">${esc(link)}</p>
+        <div class="grid grid-cols-2 gap-2"><button id="afcopy" class="h-10 rounded-xl bg-surface-container text-label-md text-on-surface">📋 ${tx('Copiar link', 'Copy link')}</button><button id="afshare" class="h-10 rounded-xl bg-surface-container text-label-md text-on-surface">💬 ${tx('Compartilhar', 'Share')}</button></div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-1">${[[d.indicados, tx('cadastros', 'sign-ups')], [d.assinantes, tx('assinantes', 'subscribers')], [money(d.a_pagar, 'brl'), tx('a receber', 'to receive')], [money(d.pago, 'brl'), tx('já recebido', 'received')]].map(([v, l]) => `<div class="bg-surface-container-lowest rounded-xl p-2"><b class="text-label-lg text-on-surface block">${v}</b><span class="text-[11px] text-on-surface-variant">${l}</span></div>`).join('')}</div>
+        <p class="text-[12px] text-on-surface-variant">${tx('Pagamentos uma vez por mês, por PIX, das comissões de assinaturas já pagas. Comissões são canceladas se houver reembolso.', 'Payouts once a month for subscriptions already paid. Commissions are cancelled on refunds.')}</p></div>` : ''}</section>`;
+  }
+  function wireParceiro(d) {
+    const cfg = d.config || { pote: 30, max_desconto: 20 };
+    const upd = () => { const v = +$('#afd').value; $('#afdv').textContent = v + '%'; $('#afcv').textContent = (cfg.pote - v) + '%'; $('#afx').textContent = v === 0 ? tx('Sem desconto: você fica com a comissão inteira.', 'No discount: you keep the full commission.') : v === cfg.pote ? tx('Tudo vira desconto: você divulga sem ganhar comissão.', 'All discount: you promote without commission.') : tx(`Ex.: numa assinatura de R$ 100, a família paga R$ ${100 - v} e você recebe R$ ${((100 - v) * (cfg.pote - v) / 100).toFixed(2).replace('.', ',')}.`, `E.g. on a $100 subscription, the family pays $${100 - v} and you get $${((100 - v) * (cfg.pote - v) / 100).toFixed(2)}.`); };
+    $('#afd').oninput = upd; upd();
+    $('#afs').onclick = async () => {
+      const cod = $('#afc').value.trim().toUpperCase(); if (!/^[A-Z0-9]{3,16}$/.test(cod)) return toast(tx('Código: 3 a 16 letras ou números, sem espaço.', 'Code: 3–16 letters or numbers, no spaces.'));
+      try { await DB.rpc('salvar_afiliado', { cod, desconto: +$('#afd').value, nome_pub: $('#afn').value.trim(), chave_pix: $('#afp').value.trim() }); toast('✅ ' + tx('Pronto! Seu link está ativo.', 'Done! Your link is live.')); render(); }
+      catch (x) { toast(/duplicate|unique/i.test(x.message) ? tx('Esse código já está em uso. Escolha outro.', 'That code is taken. Pick another.') : x.message, 4000); }
+    };
+    const a = d.afiliado; if (!a) return; const link = location.origin + '/?ref=' + a.codigo;
+    const msg = tx(`Estou usando o Quest Kids para o reforço escolar aqui em casa. Pelo meu link você ganha ${a.desconto_pct}% de desconto: ${link}`, `I use Quest Kids for homework practice at home. With my link you get ${a.desconto_pct}% off: ${link}`);
+    $('#afcopy').onclick = async () => { try { await navigator.clipboard.writeText(link); toast('📋 ' + tx('Copiado!', 'Copied!')); } catch (e) { toast(link, 5000); } };
+    $('#afshare').onclick = async () => { if (navigator.share) { try { await navigator.share({ text: msg }); } catch (e) {} } else window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank'); };
+  }
+
+  /* ================= painel de gestão (só administradores) ================= */
+  async function gestao() {
+    const d = await DB.rpc('admin_painel').catch(x => { throw new Error(/admin_painel|function|schema/i.test(x.message) ? tx('Rode o SQL 06 no Supabase para ver o painel.', 'Run SQL 06 in Supabase to see the panel.') : x.message); });
+    const precos = await DB.sel('precos', {}).catch(() => []);
+    const pm = p2 => { const m = String(p2.valor_texto).match(/(\d+(?:[.,]\d{2})?)/); if (!m) return 0; const v = parseFloat(m[1].replace(',', '.')); return /\/\s*(mês|month)/i.test(p2.valor_texto) ? v : /6\s*(meses|months)/i.test(p2.valor_texto) ? v / 6 : /year|ano/i.test(p2.valor_texto) ? v / 12 : v; };
+    let mrrB = 0, mrrU = 0;
+    Object.entries(d.por_plano || {}).forEach(([k, n]) => { const [pl, mo] = k.split('-'); const fund = pl.endsWith('*'); const p2 = precos.find(x => x.plano === pl.replace('*', '') && x.moeda === mo && !!x.fundador === fund) || precos.find(x => x.plano === pl.replace('*', '') && x.moeda === mo); if (p2) { if (mo === 'usd') mrrU += pm(p2) * n; else mrrB += pm(p2) * n; } });
+    const custo = (d.ia_mes && d.ia_mes.custo_centavos) || 0;
+    const ativos = (d.por_status || {}).active || 0;
+    const box = (n, l, sub) => `<div class="${card}"><b class="text-headline-lg-mobile text-on-surface block">${n}</b><span class="text-label-md text-on-surface-variant">${l}</span>${sub ? `<p class="text-body-sm text-on-surface-variant mt-1">${sub}</p>` : ''}</div>`;
+    shell(`<div class="space-y-5 max-w-5xl"><div class="flex items-center justify-between gap-2"><h1 class="text-headline-lg-mobile text-on-surface">🛠️ ${tx('Painel de gestão', 'Admin panel')}</h1><button id="gback" class="text-label-md text-primary underline">${tx('Voltar', 'Back')}</button></div>
+      <h2 class="text-headline-md text-on-surface">${tx('Assinaturas', 'Subscriptions')}</h2>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">${box(d.familias, tx('famílias', 'families'), `+${d.novas7} ${tx('em 7 dias', 'in 7 days')} · +${d.novas30} ${tx('em 30', 'in 30')}`)}${box(ativos, tx('assinantes ativos', 'active subscribers'), Object.entries(d.por_plano || {}).map(([k, n]) => `${k.replace('*', ' (fundador)')}: ${n}`).join(' · ') || '—')}${box((d.por_status || {}).trialing || 0, tx('em teste grátis', 'on free trial'), `${tx('conversão', 'conversion')}: ${d.familias ? Math.round(100 * ativos / d.familias) : 0}%`)}${box(d.cancel30, tx('cancelamentos (30 dias)', 'cancellations (30 days)'), `${tx('atrasados', 'past due')}: ${(d.por_status || {}).past_due || 0}`)}</div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">${box('R$ ' + mrrB.toFixed(0) + (mrrU ? ' + $' + mrrU.toFixed(0) : ''), tx('receita mensal estimada (MRR)', 'estimated MRR'))}${box('$' + (custo / 100).toFixed(2), tx('custo de IA este mês', 'AI cost this month'), `${(d.ia_mes || {}).paginas || 0} ${tx('páginas', 'pages')} · ${(d.ia_mes || {}).familias || 0} ${tx('famílias', 'families')}`)}${box(ativos ? '$' + (custo / 100 / Math.max(1, ativos)).toFixed(2) : '—', tx('custo de IA por assinante', 'AI cost per subscriber'))}${box(d.licoes30, tx('lições criadas (30 dias)', 'lessons created (30 days)'), Object.entries(d.tarefas || {}).map(([k, n]) => `${k}: ${n}`).join(' · '))}</div>
+      <h2 class="text-headline-md text-on-surface">${tx('Uso', 'Usage')}</h2>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">${box(d.criancas, tx('crianças cadastradas', 'kids'))}${box(d.ativas7, tx('crianças ativas (7 dias)', 'active kids (7 days)'), d.criancas ? Math.round(100 * d.ativas7 / d.criancas) + '% ' + tx('do total', 'of total') : '')}${box(d.sessoes7, tx('sessões (7 dias)', 'sessions (7 days)'))}${box(d.minutos7 + ' min', tx('tempo de estudo (7 dias)', 'study time (7 days)'), d.ativas7 ? Math.round(d.minutos7 / d.ativas7) + ' min ' + tx('por criança', 'per kid') : '')}</div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <section class="${card} space-y-2"><h2 class="text-headline-md text-on-surface">💸 ${tx('Quem mais gasta IA (mês)', 'Top AI spend (month)')}</h2>${(d.ia_top || []).map(x => `<div class="flex justify-between text-body-md border-b border-surface-container-high py-1.5"><span class="truncate">${esc(x.email || x.familia_id)}</span><span class="${x.custo_centavos > 300 ? 'text-error font-extrabold' : 'text-on-surface'}">$${(x.custo_centavos / 100).toFixed(2)} · ${x.paginas} p.</span></div>`).join('') || `<p class="text-body-sm text-on-surface-variant">—</p>`}<p class="text-body-sm text-on-surface-variant">${tx('Em vermelho: acima de US$ 3 no mês. Ajuste o limite em limites_ia ou o preço dos créditos.', 'Red: above $3 this month. Adjust limits_ia or credit prices.')}</p></section>
+        <section class="${card} space-y-2"><h2 class="text-headline-md text-on-surface">⚠️ ${tx('Erros da IA', 'AI errors')}</h2>${(d.erros || []).map(x => `<p class="text-body-sm text-on-surface border-b border-surface-container-high py-1.5">${new Date(x.criado_em).toLocaleDateString()} · ${esc(String(x.erro || '').slice(0, 140))}</p>`).join('') || `<p class="text-body-sm text-on-surface-variant">${tx('Nenhum. 🎉', 'None. 🎉')}</p>`}</section>
+        <section class="${card} space-y-2"><div class="flex items-center justify-between"><h2 class="text-headline-md text-on-surface">🤝 ${tx('Comissões a pagar', 'Commissions to pay')}</h2>${(d.comissoes || []).length ? `<button id="pagar" class="h-9 px-3 rounded-lg bg-primary-container text-on-primary text-label-sm">${tx('Marcar todas como pagas', 'Mark all paid')}</button>` : ''}</div>
+          ${(d.comissoes || []).map(x => `<div class="flex justify-between text-body-md border-b border-surface-container-high py-1.5"><span>${esc(x.codigo)} · PIX ${esc(x.pix || '—')}</span><b>${money(x.valor_centavos, x.moeda)}</b></div>`).join('') || `<p class="text-body-sm text-on-surface-variant">—</p>`}
+          <p class="text-body-sm text-on-surface-variant">${tx('Parceiros', 'Partners')}: ${(d.afiliados || []).map(a => `${esc(a.codigo)} (${a.desconto_pct}% desc · ${a.comissao_pct}% com · ${a.indicados} ${tx('cadastros', 'sign-ups')})`).join(' · ') || '—'}</p></section>
+        <section class="${card} space-y-2"><h2 class="text-headline-md text-on-surface">⭐ ${tx('Notas das provas (feedback dos pais)', 'Test results (parent feedback)')}</h2>${(d.feedbacks || []).map(x => `<div class="border-b border-surface-container-high py-1.5"><b class="text-label-md">${esc(x.materia || '')} · ${x.nota ?? '—'}</b>${x.autoriza_depoimento ? ' <span class="text-primary text-label-sm">✓ ' + tx('pode usar como depoimento', 'ok to use as testimonial') + '</span>' : ''}<p class="text-body-sm text-on-surface-variant">${esc(x.comentario || '')}</p></div>`).join('') || `<p class="text-body-sm text-on-surface-variant">—</p>`}</section>
+      </div>
+      <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface">🎧 ${tx('Subir um tema narrado', 'Upload a narrated topic')}</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-2"><input id="tt" class="${inputCls} sm:col-span-2" placeholder="${tx('Título', 'Title')}"><input id="ti" class="${inputCls}" placeholder="🎧" maxlength="4"><select id="tf" class="${inputCls}"><option value="10-14">10–14</option><option value="6-9">6–9</option></select></div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2"><select id="tl" class="${inputCls}"><option value="pt-BR">Português</option><option value="en">English</option></select><select id="tp" class="${inputCls}"><option value="">${tx('Grátis', 'Free')}</option><option value="ferias1">${tx('Pacote Férias', 'Holiday pack')}</option><option value="extra">Extra</option></select><input id="ta" type="file" accept="audio/*" class="text-body-sm"></div>
+        <textarea id="tx" rows="5" class="w-full rounded-xl bg-surface-container-lowest border-2 border-surface-container-high p-3 text-body-sm" placeholder="${tx('Texto do capítulo (resumo com [[palavra|significado]])', 'Chapter text (summary with [[word|meaning]])')}"></textarea>
+        <textarea id="tq" rows="4" class="w-full rounded-xl bg-surface-container-lowest border-2 border-surface-container-high p-3 text-body-sm font-mono" placeholder='${tx('Perguntas em JSON (opcional): [{"id":"x1","type":"mc","prompt":"...","options":["certa","errada"],"answer":0}]', 'Questions JSON (optional)')}'></textarea>
+        ${btnP('tsave', tx('Publicar tema (1 capítulo)', 'Publish topic (1 chapter)'), 'upload')}</section>
+    </div>`);
+    $('#gback').onclick = () => { tab = 'conta'; render(); };
+    const pg = $('#pagar'); if (pg) pg.onclick = async () => { if (!confirm(tx('Marcar todas as comissões listadas como pagas? Faça isso depois de enviar os PIX.', 'Mark all listed commissions as paid? Do this after sending payouts.'))) return; try { await DB.rpc('admin_pagar_comissao', { ids: d.comissoes.map(x => x.id) }); toast('✅'); render(); } catch (x) { toast(x.message); } };
+    $('#tsave').onclick = async () => {
+      const tit = $('#tt').value.trim(); if (!tit) return toast(tx('Coloque o título.', 'Add a title.'));
+      let qs = []; try { qs = $('#tq').value.trim() ? JSON.parse($('#tq').value) : []; } catch (e) { return toast(tx('JSON das perguntas inválido.', 'Invalid questions JSON.')); }
+      const b = $('#tsave'); b.disabled = true;
+      try {
+        const id = 'T' + Date.now().toString(36); let audio = '';
+        const f = $('#ta').files[0]; if (f) { const path = `${id}/${f.name.replace(/[^\w.-]+/g, '_')}`; await DB.upload('temas', path, f); audio = C.SUPABASE_URL + '/storage/v1/object/public/temas/' + path; }
+        await DB.ins('temas', { id, titulo: tit, icone: $('#ti').value.trim() || '🎧', faixa: $('#tf').value, idioma: $('#tl').value, pacote: $('#tp').value || null, conteudo: { chapters: [{ title: tit, audio, text: $('#tx').value, minutes: 5, questions: qs }] } });
+        toast('✅ ' + tx('Tema publicado!', 'Topic published!')); render();
+      } catch (x) { toast(x.message, 5000); b.disabled = false; }
+    };
+  }
+
   const inviteUrl = cod => location.origin + location.pathname.replace(/[^/]*$/, '') + '?convite=' + cod;
   async function conta() {
+    const [afp, adm] = await Promise.all([DB.rpc('meu_painel_afiliado').catch(() => null), DB.rpc('sou_admin').catch(() => false)]);
     const s = A().sub || {};
     const moeda = localStorage.getItem('qk.moeda') || (pt() ? 'brl' : 'usd');
     const [precos, vagas, conv] = await Promise.all([DB.sel('precos', { eq: { moeda } }).catch(() => []), DB.rpc('vagas_fundador').catch(() => 0), DB.sel('convites', { eq: { familia_id: A().fam.id } }).catch(() => [])]);
@@ -581,6 +718,8 @@
           ${conv.length ? `<details class="bg-surface-container-low rounded-xl p-3"><summary class="text-label-md text-on-surface-variant cursor-pointer">${tx('Ver código e link', 'See code and link')}</summary><b class="block text-headline-md tracking-[0.2em] text-on-surface mt-2">${esc(conv[0].codigo)}</b><span class="text-body-sm text-on-surface-variant break-all">${esc(inviteUrl(conv[0].codigo))}</span><p class="text-body-sm text-on-surface-variant mt-1">${tx('Vale por 3 dias.', 'Valid for 3 days.')}</p></details>` : ''}
           <details class="pt-1"><summary class="text-label-md text-primary cursor-pointer">${tx('Recebeu um código de outra família?', 'Got a code from another family?')}</summary>
           <div class="flex gap-2 mt-2"><input class="${inputCls} uppercase" id="cod" maxlength="8" autocapitalize="characters" placeholder="${tx('Código', 'Code')}"><button id="acc" class="h-12 px-5 rounded-xl bg-primary-container text-on-primary text-label-lg">OK</button></div></details></section>
+        ${afp ? parceiroHtml(afp) : ''}
+        ${adm === true ? `<button id="gest" class="w-full h-14 rounded-2xl bg-inverse-surface text-inverse-on-surface text-label-lg flex items-center justify-center gap-2">${I('admin_panel_settings', 'text-[22px]')} ${tx('Painel de gestão (só você vê)', 'Admin panel (only you see this)')}</button>` : ''}
         <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('lock', 'text-primary')} ${tx('Senha dos pais', 'Parents password')}</h2><p class="text-body-sm text-on-surface-variant">${tx('4 números para entrar nesta área. As crianças não devem saber.', '4 digits to enter this area. Keep it from the kids.')}</p>${btnS('senha', tx('Mudar a senha dos pais', 'Change parents password'), 'password')}</section>
         <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('volume_up', 'text-primary')} ${tx('Sons do app', 'App sounds')}</h2><p class="text-body-sm text-on-surface-variant">${tx('Sons baixinhos quando a criança acerta, erra ou termina. Ajudam você a perceber que ela está fazendo a lição.', 'Soft sounds when your child gets it right, wrong or finishes. They let you hear the lesson is happening.')}</p>${seg([['1', '🔊 ' + tx('Ligado', 'On')], ['0', '🔇 ' + tx('Desligado', 'Off')]], localStorage.getItem('qk.som') === '0' ? '0' : '1', 'data-som')}</section>
         <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('language', 'text-primary')} ${tx('Idioma do painel', 'Panel language')}</h2>${seg([['pt', 'Português'], ['en', 'English']], QK.lang, 'data-l')}</section>
@@ -603,6 +742,8 @@
     };
     app().querySelectorAll('input[name=plano]').forEach(r => r.onchange = () => { try { localStorage.setItem('qk.planoEscolhido', r.value); } catch (e) {} });
     const po = $('#portal'); if (po) po.onclick = async () => { try { const r = await DB.fn('portal', { volta: location.origin + location.pathname }); location.href = r.url; } catch (x) { toast(x.message); } };
+    const gs = $('#gest'); if (gs) gs.onclick = () => { tab = 'gestao'; render(); };
+    if (afp) wireParceiro(afp);
     $('#inv').onclick = async () => {
       const email = $('#ivm').value.trim().toLowerCase();
       if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast(tx('Confira o e-mail.', 'Check the email.'));

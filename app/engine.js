@@ -35,7 +35,7 @@
   }
   const E = Engine.prototype;
 
-  E.base = function (p) { return !p || /^(https?:|data:|blob:)/.test(p) ? p : `pacotes/${this.pack}/${p}`; };
+  E.base = function (p) { return !p || /^(https?:|data:|blob:|pacotes\/)/.test(p) ? p : `pacotes/${this.pack}/${p}`; };
 
   E.index = function () {
     const Q = this.Q = {}; const defs = this.defs = {};
@@ -103,7 +103,7 @@
     if (!it) return null;
     if (it._ai) return { id: it.id, kind: 'ai', title: it.titulo || (it.passage && it.passage.title) || 'Lição', icon: it.icone || '📸', pages: it.pages || pagesOf(it.passage && it.passage.text), aloud: 'all', questions: it.questions || [], checks: [], modoProva: !!it.modo_prova };
     if (it.kind === 'story') return { id: it.id, kind: 'story', title: it.title, icon: it.icon, pages: it.pages, aloud: it.aloud || [], checks: it.checks || [], questions: it.questions || [] };
-    if (it.kind === 'module') return { id: it.id, kind: 'module', title: it.title, icon: it.icon, pages: it.pages && it.pages[0] ? it.pages : [it.text || ''], audio: this.base(it.audio), image: this.base(it.image), aloud: [1], checks: it.checks || [], questions: it.questions || [] };
+    if (it.kind === 'module') return { id: it.id, kind: 'module', title: it.title, icon: it.icon, pages: it.pages && it.pages[0] ? it.pages : [it.text || ''], audio: this.base(it.audio), image: this.base(it.image), aloud: it.tema ? [] : [1], checks: it.checks || [], questions: it.questions || [] };
     if (it.kind === 'corner') return { id: it.id, kind: 'corner', title: it.title, icon: it.icon, pages: pagesOf(it.passage.text), aloud: [1], checks: [], questions: it.questions || [] };
     return { id: it.id, kind: 'lesson', title: (it.passage && it.passage.title) || it.title, icon: it.icon, pages: it.passage ? pagesOf(it.passage.text) : [], aloud: it.passage ? [1] : [], checks: [], questions: it.questions || [], wordParts: it.passage && it.passage.wordParts };
   };
@@ -261,6 +261,9 @@
       queue: [], items: [], used: [], reading: opts.more ? null : (opts.reading || this.nextReading()), readingDone: false, matched: false, pageRec: [], pagesSec: []
     };
     if (S.reading) {
+      // temas e leituras de fora do pacote: registra perguntas e palavras
+      (S.reading.questions || []).concat(S.reading.checks || []).forEach(q => { if (q && q.id && !this.Q[q.id]) this.Q[q.id] = q; });
+      S.reading.pages.forEach(t => String(t || '').replace(/\[\[([^|\]]+)\|([^\]]+)\]\]/g, (_, w, d) => { this.defs[w.toLowerCase()] = this.defs[w.toLowerCase()] || d; }));
       S.reading.pages.forEach((p, i) => S.queue.push({ kind: 'page', n: i + 1 }));
       // lição sem texto (só exercícios de matemática/ciências): todas as perguntas entram na sessão
       const qs = !S.reading.pages.length ? S.reading.questions.slice() : S.reading.questions.filter(q => READ_SKILLS.includes(q.skill) || S.reading.kind === 'ai' && q.pilar === 'leitura');
