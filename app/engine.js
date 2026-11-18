@@ -382,6 +382,7 @@
     const item = { at: new Date().toISOString(), qid: q.id, type: q.type, skill: q.skill, answer: typeof ans === 'number' && q.options ? q.options[ans] : (Array.isArray(ans) ? ans.join(' | ') : String(ans ?? '')), source: step.source, status: ok === null ? 'pending' : 'auto', correct: ok, station: step.station };
     if (extra.hint) item.hint = true;
     if (q.type === 'text') { item.prompt = q.prompt; if (q.rubric) item.rubric = q.rubric; }
+    if (S.simulado) { item.prompt = String(q.prompt || '').slice(0, 300); try { item.certa = String(this.answerText(q) || '').slice(0, 200); } catch (e) {} }
     S.items.push(item); S.earned += coins;
     const day = this.prog.dias[today()]; if (day) { day.q++; if (ok) day.ok++; }
     if (q.skill) { const sk = this.prog.skills[q.skill] = this.prog.skills[q.skill] || { run: 0, right: 0, wrong: 0 }; if (ok) { sk.right++; sk.run++; } else if (ok === false) { sk.wrong++; sk.run = 0; } sk.struggling = sk.wrong > 2 && sk.wrong > sk.right / 2; }

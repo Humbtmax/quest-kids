@@ -522,7 +522,7 @@
   const fmtNota = n => n === null || n === undefined ? '—' : (Math.round(n * 10) / 10).toFixed(1).replace('.', isPt() ? ',' : '.');
   async function runSim(cfg) {
     if (!A.planOk()) return toast(kt('planoVencido'));
-    const e = A.eng; cfg = Object.assign({}, cfg, { materias: (cfg.licoes && cfg.licoes.length ? (e._todas || e.licoes).filter(l => cfg.licoes.some(id => l.id === id || l.id === 'AI-' + id)) : e.licoes).map(l => l.titulo || l.title).filter(Boolean).slice(0, 6) });
+    const e = A.eng; cfg = Object.assign({}, cfg, { modo: e.modo || 'estudo', materias: (cfg.licoes && cfg.licoes.length ? (e._todas || e.licoes).filter(l => cfg.licoes.some(id => l.id === id || l.id === 'AI-' + id)) : e.licoes).map(l => l.titulo || l.title).filter(Boolean).slice(0, 6) });
     const S = e.startSession({ simulado: cfg });
     if (!S.cap) { toast(L('Ainda não há perguntas para um simulado. Faça algumas lições primeiro!', 'No questions for a practice test yet. Do some lessons first!')); return kidHome(); }
     Ls = { t0: Date.now(), hidden: 0, hidAt: null, step: null, n: 0 };

@@ -165,6 +165,7 @@
           <p class="text-body-sm text-on-surface-variant">${tx('Aparece na tela Hoje dela. Como numa prova, ela só vê a nota no final.', 'It shows on her Today screen. Like a real test, she only sees the grade at the end.')}</p></div>
         ${sims.length ? (() => { const g = {}; sims.slice().reverse().forEach(t => { const sm = t.leitura.simulado, k = (sm.materias && sm.materias.length === 1 ? sm.materias[0] : sm.materias && sm.materias.length ? tx('Várias matérias', 'Several subjects') : tx('Todas as matérias', 'All subjects')); (g[k] = g[k] || []).push(sm.nota); });
           return `<div class="bg-surface-container-low rounded-2xl p-3 space-y-1.5"><b class="text-label-lg text-on-surface">📚 ${tx('Notas dos simulados por matéria', 'Practice test grades by subject')}</b>${Object.entries(g).map(([m, ns]) => `<div class="flex items-center justify-between gap-2 text-body-md"><span class="text-on-surface truncate">${esc(m)}</span><b class="text-on-surface whitespace-nowrap">${ns.map(fmtN1).join(' → ')}${ns.length > 1 ? (ns[ns.length - 1] > ns[0] ? ' 📈' : ns[ns.length - 1] < ns[0] ? ' 📉' : '') : ''}</b></div>`).join('')}</div>`; })() : ''}
+        <button id="simhist" class="w-full h-11 rounded-xl bg-surface-container text-on-surface text-label-md">📚 ${tx('Ver todos os resultados dos simulados', 'See all practice test results')}</button>
         ${sims.length ? `<div><b class="text-label-lg text-on-surface">${tx('Simulados feitos', 'Practice tests taken')}</b><div class="divide-y divide-surface-container-high mt-1">${sims.map((t, i) => { const sm = t.leitura.simulado, prev = sims[i + 1]; return `<button data-sim="${i}" class="w-full text-left py-2.5 flex items-center gap-3"><span class="flex-1 text-body-md text-on-surface">${fmtD(String(t.iniciada_em).slice(0, 10))} · ${t.total} ${tx('perguntas', 'questions')} · ⏱️ ${Math.max(1, Math.round((t.duracao_seg || 0) / 60))} min</span><b class="text-label-lg ${sm.nota >= 7 ? 'text-primary' : 'text-secondary'}">${fmtN1(sm.nota)}</b>${prev ? arrow(sm.nota, prev.leitura.simulado.nota) : ''}</button>`; }).join('')}</div></div>` : ''}
       </section>
       <button id="mais" class="w-full h-12 rounded-2xl bg-surface-container text-on-surface text-label-lg">${maisGraf ? tx('Esconder gráficos extras ▲', 'Hide extra charts ▲') : tx('📈 Ver mais gráficos', '📈 See more charts')}</button>
@@ -202,17 +203,71 @@
     const visto = (() => { try { return localStorage.getItem('qk.simvisto.' + kid.id) || ''; } catch (e) { return ''; } })();
     if (sims[0] && sims[0].iniciada_em > visto) { try { localStorage.setItem('qk.simvisto.' + kid.id, sims[0].iniciada_em); } catch (e) {} setTimeout(() => simModal(sims[0], true), 300); }
     app().querySelectorAll('[data-sim]').forEach(b => b.onclick = () => simModal(sims[+b.dataset.sim]));
-    function simModal(t2, novo) {
-      const wrong = (t2.itens || []).filter(i => i.correct === false);
-      const ov = document.createElement('div'); ov.className = 'fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center';
-      ov.innerHTML = `<div class="bg-surface w-full sm:max-w-lg max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 space-y-3"><div class="flex justify-between items-center"><h3 class="text-headline-md text-on-surface">${novo ? '🎉 ' + tx(`Chegou o resultado do simulado de ${esc(kid.apelido)}!`, `${esc(kid.apelido)}'s practice test result is in!`) + '<br>' : ''}📝 ${tx('Simulado', 'Practice test')} · ${fmtN1(t2.leitura.simulado.nota)}${(t2.leitura.simulado.materias || []).length ? ' · ' + esc(t2.leitura.simulado.materias.join(', ').slice(0, 60)) : ''}</h3><button data-x class="w-10 h-10 rounded-full bg-surface-container">✕</button></div>
-        <p class="text-body-md text-on-surface">${t2.acertos}/${t2.total} ${tx('certas', 'right')} · ⏱️ ${Math.max(1, Math.round((t2.duracao_seg || 0) / 60))} min${t2.leitura.simulado.tempo ? ' / ' + t2.leitura.simulado.tempo + ' min' : ''} · ${tx('média', 'avg')} ${Math.round((t2.duracao_seg || 0) / Math.max(1, t2.total))}s ${tx('por pergunta', 'per question')}</p>
-        ${wrong.length ? `<b class="text-label-lg text-on-surface">${tx('Errou', 'Missed')}</b>${wrong.map(i => `<div class="bg-surface-container-low rounded-xl p-3 text-body-sm"><span class="text-on-surface-variant">${tx('Resposta dela', 'Her answer')}:</span> <b class="text-error">${esc(i.answer)}</b><br><span class="text-on-surface-variant">${esc(A().skillInfo(i.skill || '').name)}</span></div>`).join('')}` : `<p class="text-body-md text-primary">${tx('Acertou tudo! 🎉', 'All right! 🎉')}</p>`}
-        <p class="text-body-sm text-on-surface-variant">ℹ️ ${DISC()}</p></div>`;
-      document.body.appendChild(ov); ov.onclick = e => { if (e.target === ov || e.target.closest('[data-x]')) ov.remove(); };
-    }
+    function simModal(t2, novo) { simCard(kid, t2, { novo, todos: sims, onNovo: () => { const e2 = $('#simsave'); if (e2) e2.scrollIntoView({ behavior: 'smooth', block: 'center' }); } }); }
+    const sh = $('#simhist'); if (sh) sh.onclick = () => simHistorico(kid);
   }
   const fmtD = d => new Date(d + 'T12:00').toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' });
+  /* ---------- resultado do simulado: cartão bonito e motivador para os pais ---------- */
+  const MODO_TAG = { prova: ['📝', () => tx('Modo prova', 'Test mode'), 'bg-tertiary-container/30'], estudo: ['📘', () => tx('Estudo do dia a dia', 'Everyday study'), 'bg-primary-fixed/40'], ferias: ['🏖️', () => tx('Modo férias', 'Holiday mode'), 'bg-secondary-container/30'] };
+  const nota1 = n => (Math.round((+n || 0) * 10) / 10).toLocaleString(pt() ? 'pt-BR' : 'en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  function simCard(kid, t2, o) {
+    o = o || {};
+    const sm = t2.leitura.simulado, nota = +sm.nota || 0, its = (t2.itens || []).filter(i => i.correct === true || i.correct === false);
+    const certas = its.filter(i => i.correct).length, total = its.length || t2.total || 0, mins = Math.max(1, Math.round((t2.duracao_seg || 0) / 60));
+    const ant = (o.todos || []).filter(x => x.iniciada_em < t2.iniciada_em && x.leitura && x.leitura.simulado).sort((a, b) => b.iniciada_em.localeCompare(a.iniciada_em))[0];
+    const dif = ant ? Math.round((nota - ant.leitura.simulado.nota) * 10) / 10 : null;
+    const por = {}; its.forEach(i => { const n = A().skillInfo(i.skill || '').name || i.skill; if (!n) return; por[n] = por[n] || [0, 0]; por[n][i.correct ? 0 : 1]++; });
+    const fortes = Object.keys(por).filter(n => por[n][0] > por[n][1]), reforcar = Object.keys(por).filter(n => por[n][1] && !fortes.includes(n));
+    const cor = nota >= 7 ? 'from-primary-container to-primary' : nota >= 5 ? 'from-secondary-container to-secondary' : 'from-tertiary-container to-tertiary';
+    const msg = nota >= 9 ? tx(`Excelente! ${esc(kid.apelido)} domina este conteúdo. 🌟`, `Excellent! ${esc(kid.apelido)} has mastered this. 🌟`)
+      : nota >= 7 ? tx('Muito bem! Está no caminho certo para a prova. 🎉', 'Well done! On the right track for the test. 🎉')
+      : nota >= 5 ? tx('Bom começo! Com mais alguns dias de revisão a nota sobe. 💪', 'Good start! A few more days of review will raise the grade. 💪')
+      : tx('Ótimo momento para descobrir o que revisar, antes da prova de verdade. Vamos juntos! 💙', 'A great time to find out what to review, before the real test. We’ve got this! 💙');
+    const tag = MODO_TAG[sm.modo] || null, mat = (sm.materias || []).join(', ');
+    const resp = i => esc(String(i.answer || '—')).replace(/ \| /g, ' → ');
+    const ov = document.createElement('div'); ov.className = 'fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center';
+    ov.innerHTML = `<div class="bg-surface w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl badge-pop">
+      <div class="relative bg-gradient-to-br ${cor} text-white p-5 pb-6 rounded-t-3xl">
+        <button data-x class="absolute top-3 right-3 w-10 h-10 rounded-full bg-white/25 text-white text-[18px]" aria-label="${tx('Fechar', 'Close')}">✕</button>
+        <p class="text-label-md opacity-90">${o.novo ? '🎉 ' + tx('Chegou o resultado!', 'The result is in!') : '📝 ' + tx('Resultado do simulado', 'Practice test result')} · ${fmtD(String(t2.iniciada_em).slice(0, 10))}</p>
+        <div class="flex items-center gap-4 mt-3"><div class="w-24 h-24 rounded-full bg-white/95 flex flex-col items-center justify-center shrink-0 shadow-lg"><span class="text-[34px] font-black text-on-surface leading-none">${nota1(nota)}</span><span class="text-[11px] text-on-surface-variant">${tx('de 10', 'out of 10')}</span></div>
+          <div class="min-w-0"><p class="text-headline-md leading-snug">${esc(kid.avatar || '')} ${esc(kid.apelido)}</p><p class="text-body-md opacity-95 mt-1">${msg}</p></div></div>
+        <div class="flex gap-1.5 flex-wrap mt-3">${tag ? `<span class="px-2.5 py-1 rounded-full bg-white/25 text-label-sm">${tag[0]} ${tag[1]()}</span>` : ''}${mat ? `<span class="px-2.5 py-1 rounded-full bg-white/25 text-label-sm truncate max-w-full">📚 ${esc(mat.slice(0, 60))}</span>` : ''}</div></div>
+      <div class="p-5 space-y-4">
+        <div class="grid grid-cols-3 gap-2 text-center">
+          <div class="bg-surface-container-low rounded-2xl p-2.5"><b class="text-headline-md text-on-surface block">${certas}/${total}</b><span class="text-[11px] text-on-surface-variant">${tx('acertos', 'right')}</span></div>
+          <div class="bg-surface-container-low rounded-2xl p-2.5"><b class="text-headline-md text-on-surface block">${mins} min</b><span class="text-[11px] text-on-surface-variant">${sm.tempo ? tx(`de ${sm.tempo} min`, `of ${sm.tempo} min`) : tx('no total', 'total')}</span></div>
+          <div class="bg-surface-container-low rounded-2xl p-2.5"><b class="text-headline-md block ${dif === null ? 'text-on-surface' : dif > 0 ? 'text-primary' : dif < 0 ? 'text-on-surface-variant' : 'text-on-surface'}">${dif === null ? '1º' : (dif > 0 ? '▲ +' : dif < 0 ? '▼ ' : '= ') + nota1(Math.abs(dif))}</b><span class="text-[11px] text-on-surface-variant">${dif === null ? tx('primeiro simulado', 'first test') : tx('vs. anterior', 'vs. last')}</span></div></div>
+        ${fortes.length ? `<div><p class="text-label-lg text-on-surface mb-1.5">💪 ${tx('Pontos fortes', 'Strengths')}</p><div class="flex flex-wrap gap-1.5">${fortes.slice(0, 8).map(x => `<span class="px-3 py-1 rounded-full bg-primary-fixed/50 text-on-surface text-label-sm">✓ ${esc(x)}</span>`).join('')}</div></div>` : ''}
+        ${reforcar.length ? `<div><p class="text-label-lg text-on-surface mb-1.5">🎯 ${tx('Vamos reforçar', "Let's reinforce")}</p><div class="flex flex-wrap gap-1.5">${reforcar.slice(0, 8).map(x => `<span class="px-3 py-1 rounded-full bg-secondary-fixed/60 text-on-surface text-label-sm">${esc(x)}</span>`).join('')}</div>
+          <p class="text-body-sm text-on-surface-variant mt-2">✨ ${tx('O app já vai trazer mais perguntas desses assuntos nas próximas lições, sem você precisar fazer nada.', 'The app will bring more questions on these topics in the next lessons, automatically.')}</p></div>` : `<p class="text-body-md text-primary font-bold">🎉 ${tx('Acertou tudo!', 'All correct!')}</p>`}
+        ${its.some(i => !i.correct) ? `<details class="bg-surface-container-low rounded-2xl p-3"><summary class="text-label-md text-primary cursor-pointer">${tx('Ver as perguntas para revisar juntos', 'See the questions to review together')}</summary><div class="space-y-2 mt-2">
+          ${its.filter(i => !i.correct).map(i => `<div class="bg-surface-container-lowest rounded-xl p-3 space-y-1">${i.prompt ? `<p class="text-body-md text-on-surface">${md(i.prompt)}</p>` : `<p class="text-label-md text-on-surface">${esc(A().skillInfo(i.skill || '').name || '')}</p>`}${i.certa ? `<p class="text-body-sm text-primary font-bold">✓ ${md(String(i.certa).replace(/\n/g, ' → '))}</p>` : ''}<p class="text-body-sm text-on-surface-variant">${tx('Respondeu', 'Answered')}: ${resp(i)}</p></div>`).join('')}</div></details>` : ''}
+        <div class="bg-primary-fixed/20 rounded-2xl p-3 text-body-sm text-on-surface">💬 ${tx(`Dica: elogie o esforço ("você se dedicou muito!") e revisem 1 ou 2 perguntas juntos. Errar no simulado é ótimo: é aqui que se aprende, antes da prova.`, 'Tip: praise the effort ("you worked so hard!") and review 1 or 2 questions together. Mistakes in practice are great: this is where learning happens, before the test.')}</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${o.onNovo ? `<button data-novo class="h-12 rounded-xl bg-primary-container text-on-primary text-label-lg">🧪 ${tx('Marcar outro simulado', 'Set another test')}</button>` : ''}<button data-hist class="h-12 rounded-xl bg-surface-container text-on-surface text-label-lg">📚 ${tx('Ver todos os simulados', 'See all practice tests')}</button></div>
+        <button data-x class="w-full h-11 rounded-xl text-label-md text-on-surface-variant">${tx('Fechar', 'Close')}</button>
+        <p class="text-[11px] text-on-surface-variant">ℹ️ ${DISC()}</p></div></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target === ov || e.target.closest('[data-x]')) ov.remove(); };
+    const nb = ov.querySelector('[data-novo]'); if (nb) nb.onclick = () => { ov.remove(); o.onNovo(); };
+    ov.querySelector('[data-hist]').onclick = () => { ov.remove(); simHistorico(kid); };
+  }
+  // histórico de todos os simulados, por matéria e por modo
+  async function simHistorico(kid) {
+    const ts = await DB.sel('tentativas', { eq: { crianca_id: kid.id, tipo: 'simulado' }, order: 'iniciada_em.desc', limit: 60 }).catch(() => []);
+    const sims = ts.filter(t => t.leitura && t.leitura.simulado);
+    const g = {}; sims.forEach(t => { const sm = t.leitura.simulado, k = (sm.materias || []).length === 1 ? sm.materias[0] : (sm.materias || []).length ? tx('Várias matérias', 'Several subjects') : tx('Todas as matérias', 'All subjects'); (g[k] = g[k] || []).push(t); });
+    const ov = document.createElement('div'); ov.className = 'fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center';
+    ov.innerHTML = `<div class="bg-surface w-full sm:max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 space-y-4 badge-pop">
+      <div class="flex items-center justify-between gap-2"><h3 class="text-headline-md text-on-surface">📚 ${tx('Simulados de', 'Practice tests ·')} ${esc(kid.avatar || '')} ${esc(kid.apelido)}</h3><button data-x class="w-10 h-10 rounded-full bg-surface-container shrink-0">✕</button></div>
+      ${sims.length ? Object.entries(g).map(([m, arr]) => { const ns = arr.slice().reverse().map(t => t.leitura.simulado.nota); return `<section class="bg-surface-container-low rounded-2xl p-3 space-y-2"><div class="flex items-center justify-between gap-2"><b class="text-label-lg text-on-surface truncate">${esc(m)}</b><span class="text-label-md text-on-surface whitespace-nowrap">${ns.map(nota1).join(' → ')}${ns.length > 1 ? (ns[ns.length - 1] > ns[0] ? ' 📈' : ns[ns.length - 1] < ns[0] ? ' 📉' : '') : ''}</span></div>
+        ${arr.map(t => { const sm = t.leitura.simulado, tg = MODO_TAG[sm.modo]; return `<button data-sid="${esc(t.id)}" class="w-full text-left bg-surface-container-lowest rounded-xl p-2.5 flex items-center gap-3"><span class="w-12 h-12 rounded-full ${sm.nota >= 7 ? 'bg-primary-container text-on-primary' : sm.nota >= 5 ? 'bg-secondary-container text-on-secondary-container' : 'bg-tertiary-container text-on-tertiary-container'} flex items-center justify-center text-label-lg font-black shrink-0">${nota1(sm.nota)}</span><span class="flex-1 min-w-0"><b class="text-label-md text-on-surface block">${fmtD(String(t.iniciada_em).slice(0, 10))} · ${t.acertos}/${t.total} ${tx('certas', 'right')}</b>${tg ? `<span class="inline-block mt-0.5 px-2 py-0.5 rounded-full ${tg[2]} text-[11px] text-on-surface">${tg[0]} ${tg[1]()}</span>` : ''}</span>${I('chevron_right', 'text-on-surface-variant')}</button>`; }).join('')}</section>`; }).join('')
+        : `<p class="text-body-md text-on-surface-variant">${tx('Ainda não tem simulado. Marque um no Resumo, em "Preparar um simulado".', 'No practice tests yet. Set one up in Summary.')}</p>`}
+      <p class="text-[11px] text-on-surface-variant">ℹ️ ${DISC()}</p></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target === ov || e.target.closest('[data-x]')) ov.remove(); };
+    ov.querySelectorAll('[data-sid]').forEach(b => b.onclick = () => { const t = sims.find(x => x.id === b.dataset.sid); ov.remove(); simCard(kid, t, { todos: sims }); });
+  }
   // relatório em PDF simples (abre a versão para imprimir / salvar em PDF)
   function pdfReport(kid, texto, d) {
     const w = window.open('', '_blank'); if (!w) return toast(tx('Libere os pop-ups para gerar o PDF.', 'Allow pop-ups to create the PDF.'));
