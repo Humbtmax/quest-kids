@@ -80,7 +80,7 @@
       e.preventDefault(); const f = e.target, err = $('#err'); err.textContent = ''; err.className = 'text-label-md text-error min-h-[1.2em]'; const b = f.querySelector('button'); b.disabled = true;
       try {
         if (mode === 'entrar') { await Auth.signIn(f.email.value.trim(), f.pw.value); return boot(); }
-        if (mode === 'criar') { const r = await Auth.signUp(f.email.value.trim(), f.pw.value); if (r === 'ok') return boot(); return authScreen('entrar', t('confiraEmail')); }
+        if (mode === 'criar') { const r = await Auth.signUp(f.email.value.trim(), f.pw.value); if (r === 'ok') return boot(); if (r === 'existe') return authScreen('entrar', P('Este e-mail já tem conta. Entre com a sua senha (ou toque em "Esqueci a senha").', 'This email already has an account. Log in with your password (or tap "Forgot password").')); return authScreen('entrar', t('confiraEmail')); }
         if (mode === 'recuperar') { await Auth.recover(f.email.value.trim()); return authScreen('entrar', t('recuperarEnviado')); }
         if (mode === 'nova') { await Auth.newPassword(f.pw.value); toast('✅'); return boot(); }
       } catch (x) { err.textContent = traduz(x.message); b.disabled = false; }
@@ -119,6 +119,12 @@
     A.kids = kids.filter(k => !k.arquivada);
   }
   A.loadFamily = loadFamily;
+  // a pessoa já tinha começado antes (já passou da apresentação do Quico, em qualquer aparelho, ou já aceitou os termos)
+  A.voltou = () => {
+    const f = A.famRow || {}, uid = (Auth.user && Auth.user.id) || '';
+    let visto = false; try { visto = localStorage.getItem('qk.intro.' + uid) === '1'; } catch (e) {}
+    return visto || !!f.intro_em || !!f.termos_versao;
+  };
   // país da família define moeda, Pix, currículo e formatos (Brasil × Estados Unidos)
   A.pais = () => (A.famRow && A.famRow.pais) || (QK.lang === 'en' ? 'US' : 'BR');
   A.moeda = () => A.pais() === 'US' ? 'usd' : 'brl';
@@ -162,7 +168,7 @@
       await loadFamily();
       if (/[?&]upsell=1/.test(location.search) && A.kids.length) { history.replaceState(null, '', location.pathname); return QKOnboard.start({ first: true, jump: 'upsell', apelido: A.kids[0].apelido }); }
       if (/[?&]pago=1/.test(location.search)) { toast(P('🎉 Assinatura confirmada! Obrigado.', '🎉 Subscription confirmed! Thank you.'), 4000); history.replaceState(null, '', location.pathname); }
-      if (!A.kids.length) return QKOnboard.start({ first: true });
+      if (!A.kids.length) return QKOnboard.start({ first: true, voltou: A.voltou() });
       if (QKOnboard.needTerms()) return QKOnboard.terms(picker);
       // o celular dormiu ou o pai foi para outro app e a página recarregou: volta direto para a Área dos pais (até 10 min sem uso)
       if (paisAberto() && flag('qk.naPais') === '1') return QKParent.open();

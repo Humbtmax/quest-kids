@@ -12,14 +12,20 @@ h2{font-size:17px;margin:0 0 8px}.row{display:flex;align-items:center;gap:8px;pa
 .url a{color:var(--tx);text-decoration:none}.flag{font-size:18px}
 button{flex:none;border:0;border-radius:10px;background:var(--pri);color:#fff;font-weight:700;font-size:13px;padding:8px 12px;cursor:pointer}
 button.ok{background:var(--pri2)}.note{font-size:13px;color:var(--mut);background:var(--ok);border-radius:12px;padding:10px;margin:0 0 14px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.4 system-ui,sans-serif;background:var(--bg);border-radius:12px;padding:10px;margin:6px 0;max-height:220px;overflow-y:auto}
+.acts{display:flex;gap:8px;margin-bottom:10px}.acts a{flex:none;border-radius:10px;background:#25D366;color:#fff;font-weight:700;font-size:13px;padding:8px 12px;text-decoration:none}
 footer{color:var(--mut);font-size:12px;text-align:center;margin:18px 0 30px}
 </style></head><body><main>
 <h1>🚀 Quest Kids · Endereços</h1>
 <p class="sub">Página secreta (não aparece no Google). Toque em <b>Copiar</b> e cole no WhatsApp ou e-mail. Atualizada em <span id="upd">18/11/2026</span>.</p>
 <p class="note">💡 Os links já levam o idioma certo: 🇧🇷 abre em português, 🇺🇸 abre em inglês.</p>
 <div id="lista"></div>
+<h1 style="font-size:20px;margin-top:22px">📨 Convites com mensagem pronta</h1>
+<p class="sub">Toque em <b>Copiar mensagem</b> ou <b>WhatsApp</b>. Cada convite tem a versão 🇧🇷 e 🇺🇸.</p>
+<div id="convites"></div>
 <footer>Quest Kids · uso interno da Paula</footer>
 </main>
+<script src="../app/convites.js?v=14"></script>
 <script>
 const O = 'https://quest-kids-app.pages.dev';
 const GRUPOS = [
@@ -28,6 +34,7 @@ const GRUPOS = [
   ['🔑 Entrar no app (quem já tem conta)', [['🇧🇷', O + '/app/?lang=pt'], ['🇺🇸', O + '/app/?lang=en']]],
   ['🧪 Demonstração com dados de exemplo (senha dos pais: 2026)', [['🇧🇷', O + '/app/?demo=gabi&lang=pt'], ['🇺🇸', O + '/app/?demo=gabi&lang=en']]],
   ['🚪 Sair da demonstração', [['🇧🇷', O + '/app/?demo=0&lang=pt'], ['🇺🇸', O + '/app/?demo=0&lang=en']]],
+  ['📨 Convite de outro responsável (cada família gera o seu em Conta → Outro responsável; vale 3 dias)', [['🔗', O + '/app/?convite=CODIGO  →  troque CODIGO pelo código gerado no app']]],
   ['🤝 Link de parceiro · RODRIGO', [['🇧🇷', O + '/?ref=RODRIGO'], ['🇺🇸', O + '/en/?ref=RODRIGO']]],
   ['📜 Termos de Uso', [['🇧🇷', O + '/termos.html'], ['🇺🇸', O + '/termos.html#en']]],
   ['🔒 Política de Privacidade', [['🇧🇷', O + '/privacidade.html'], ['🇺🇸', O + '/privacidade.html#en']]],
@@ -39,5 +46,12 @@ document.querySelectorAll('[data-c]').forEach(b => b.onclick = async () => {
   const t = b.dataset.c;
   try { await navigator.clipboard.writeText(t); } catch (e) { const i = document.createElement('textarea'); i.value = t; document.body.appendChild(i); i.select(); document.execCommand('copy'); i.remove(); }
   b.textContent = 'Copiado ✓'; b.classList.add('ok'); setTimeout(() => { b.textContent = 'Copiar'; b.classList.remove('ok'); }, 1600);
+});
+const CV = window.QK_CONVITES ? QK_CONVITES(O) : [];
+document.getElementById('convites').innerHTML = CV.map(c => `<section><h2>${c.icone} ${c.titulo}</h2><p class="lbl">${esc(c.sobre)}</p>${[['🇧🇷', c.pt], ['🇺🇸', c.en]].map(([f, t]) => `<pre>${f} ${esc(t)}</pre><div class="acts"><button data-c="${esc(t)}">Copiar mensagem</button><a href="https://wa.me/?text=${encodeURIComponent(t)}" target="_blank" rel="noopener">💬 WhatsApp</a></div>`).join('')}</section>`).join('');
+document.querySelectorAll('#convites [data-c]').forEach(b => b.onclick = async () => {
+  const t = b.dataset.c;
+  try { await navigator.clipboard.writeText(t); } catch (e) { const i = document.createElement('textarea'); i.value = t; document.body.appendChild(i); i.select(); document.execCommand('copy'); i.remove(); }
+  b.textContent = 'Copiado ✓'; b.classList.add('ok'); setTimeout(() => { b.textContent = 'Copiar mensagem'; b.classList.remove('ok'); }, 1600);
 });
 </script></body></html>

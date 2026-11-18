@@ -165,6 +165,8 @@
       let ref = null; try { ref = localStorage.getItem('qk.ref'); } catch (e) {}
       const j = await authCall('signup', { email, password, data: Object.assign({ idioma: LANG }, ref ? { ref } : {}) });
       if (j.access_token) { saveSess(fromToken(j)); return 'ok'; }
+      // e-mail que já tem conta: o Supabase devolve um usuário "vazio" (sem identidades) em vez de erro
+      const u = j.user || j; if (u && Array.isArray(u.identities) && u.identities.length === 0) return 'existe';
       return 'confirmar';
     },
     google() {

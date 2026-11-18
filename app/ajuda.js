@@ -23,7 +23,7 @@
     convite: ['👪', 'Convidar responsável', 'Invite a parent'], parceiro: ['🤝', 'Indique e ganhe', 'Refer and earn'], pais: ['🌎', 'País da família', 'Family country'],
     senha: ['🔒', 'Senha dos pais', 'Parents password'], suporte: ['✉️', 'Falar com o suporte', 'Contact support'],
     criar_conta: ['✨', 'Criar conta grátis', 'Create a free account'], entrar: ['🔑', 'Entrar no app', 'Log in'], planos_site: ['⭐', 'Ver planos', 'See plans'],
-    painel: ['🛠️', 'Abrir o Painel de gestão', 'Open admin panel'], g_links: ['🔗', 'Links para mandar', 'Links to share'], g_assin: ['📈', 'Assinaturas', 'Subscriptions'], g_uso: ['📊', 'Uso', 'Usage'],
+    painel: ['🛠️', 'Abrir o Painel de gestão', 'Open admin panel'], g_links: ['🔗', 'Links para mandar', 'Links to share'], g_convites: ['📨', 'Convites com mensagem pronta', 'Invites with messages'], g_assin: ['📈', 'Assinaturas', 'Subscriptions'], g_uso: ['📊', 'Uso', 'Usage'],
     g_iatop: ['💸', 'Quem mais gasta IA', 'Top AI spend'], g_erros: ['⚠️', 'Erros da IA', 'AI errors'], g_comis: ['🤝', 'Comissões a pagar', 'Commissions'], g_feed: ['⭐', 'Notas das provas', 'Test results'],
     g_rep: ['🚩', 'Perguntas com problema', 'Reported questions'], g_quico: ['💬', 'Dúvidas feitas ao Quico', 'Questions to Quico'], g_custo: ['🧮', 'Custo por envio', 'Cost per upload'], g_contas: ['👪', 'Contas', 'Accounts'], g_tema: ['🎧', 'Subir tema narrado', 'Upload a topic'],
     demo: ['🧪', 'Ver a demonstração', 'Try the demo'], como_funciona: ['💡', 'Como funciona', 'How it works'], termos: ['📜', 'Termos de Uso', 'Terms of Use'], privacidade: ['🔒', 'Privacidade', 'Privacy']

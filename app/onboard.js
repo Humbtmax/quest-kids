@@ -188,7 +188,12 @@
     const first = !!opts.first;
     const others = A().kids.slice();
     const d = { apelido: '', idade: null, mes_nasc: null, idioma_app: QK.lang === 'en' ? 'en' : 'pt-BR', avatar: AVATARES[others.length % AVATARES.length] || '🦄', foco: [], minutos: 15, dias: [1, 2, 3, 4, 5], pin: '' };
-    const steps = (first ? ['oi', 'parabens', 'saiba', 'termos', 'pais'] : []).concat(['apelido', 'idade', 'mes', 'idioma', 'foco', 'meta', 'dias', 'constancia', 'pin', 'promessa'], first ? ['modos', 'casa', 'planos', 'upsell'] : []);
+    // quem já tem conta (entrou de novo sem ter terminado o cadastro da criança) NÃO refaz a apresentação:
+    // vê um "que bom te ver de novo" e vai direto para o que falta (termos e país só se ainda não fez)
+    const voltou = first && !!opts.voltou, fr = A().famRow || {};
+    const inicio = voltou ? ['oi'].concat(fr.termos_versao === TERMOS_V ? [] : ['termos'], fr.pais ? [] : ['pais']) : first ? ['oi', 'parabens', 'saiba', 'termos', 'pais'] : [];
+    const steps = inicio.concat(['apelido', 'idade', 'mes', 'idioma', 'foco', 'meta', 'dias', 'constancia', 'pin', 'promessa'], voltou ? ['casa', 'planos'] : first ? ['modos', 'casa', 'planos', 'upsell'] : []);
+    const marcaVisto = () => { try { localStorage.setItem('qk.intro.' + ((QK.Auth.user && QK.Auth.user.id) || ''), '1'); } catch (e) {} if (!QK.DEMO) DB.rpc('marcar_intro').catch(() => {}); };
     const N = steps.length; let i = Math.max(0, steps.indexOf(opts.jump || '')), saved = null, dir = 1;
     if (opts.apelido) d.apelido = opts.apelido;
     const idx = n => steps.indexOf(n);
@@ -202,12 +207,12 @@
     function draw() {
       const s = steps[i], bk = back(i), common = { step: i + 1, total: N, back: bk };
       if (s === 'oi') {
-        frame(Object.assign(common, { back: null, btn: tx('Oi, Quico! 👋', 'Hi, Quico! 👋'), foot: `<button id="tenho" class="w-full h-11 text-label-md text-primary">${tx('Recebi um convite de outro responsável', 'I got an invite from another parent')}</button>`, body: `<div class="text-center pt-4 mb-6 [&>svg]:mx-auto">${mascot(130)}</div>
-          ${bubble([tx('Oi! Eu sou o Quico 👋', "Hi! I'm Quico 👋"), tx('Sou o ajudante do Quest Kids. Vou montar o estudo do seu filho junto com você, em 1 minutinho.', "I'm the Quest Kids helper. I'll set up your child's study with you in about a minute."), tx('É só responder umas perguntas rápidas. Vamos?', 'Just a few quick questions. Ready?')], 'none')}
+        frame(Object.assign(common, { back: null, btn: voltou ? tx('Cadastrar minha criança', 'Add my child') : tx('Oi, Quico! 👋', 'Hi, Quico! 👋'), foot: `<button id="tenho" class="w-full h-11 text-label-md text-primary">${tx('Recebi um convite de outro responsável', 'I got an invite from another parent')}</button>`, body: `<div class="text-center pt-4 mb-6 [&>svg]:mx-auto">${mascot(130)}</div>
+          ${voltou ? bubble([tx('Que bom te ver de novo! 👋', 'Great to see you again! 👋'), tx('Sua conta já está criada. Falta só cadastrar a sua criança para eu montar as lições.', 'Your account is ready. We just need to add your child so I can build the lessons.'), tx('Leva 1 minutinho. Vamos terminar?', 'It takes about a minute. Shall we finish?')], 'none') : bubble([tx('Oi! Eu sou o Quico 👋', "Hi! I'm Quico 👋"), tx('Sou o ajudante do Quest Kids. Vou montar o estudo do seu filho junto com você, em 1 minutinho.', "I'm the Quest Kids helper. I'll set up your child's study with you in about a minute."), tx('É só responder umas perguntas rápidas. Vamos?', 'Just a few quick questions. Ready?')], 'none')}
           <div id="cv" class="hidden mt-2 bg-surface-container-low rounded-2xl p-4 space-y-2"><p class="text-body-md text-on-surface">${tx('Digite o código que você recebeu:', 'Type the code you received:')}</p><div class="flex gap-2"><input id="cod" class="${inputCls} !h-12 !text-label-lg uppercase tracking-widest" maxlength="8" autocapitalize="characters" autocomplete="off"><button id="acc" class="h-12 px-5 rounded-xl bg-primary-container text-on-primary text-label-lg">OK</button></div></div>` }));
         $('#tenho').onclick = () => { $('#cv').classList.remove('hidden'); $('#cod').focus(); };
         $('#acc').onclick = async () => { const c = $('#cod').value.trim(); if (!c) return; try { await DB.rpc('aceitar_convite', { cod: c }); toast('✅ ' + tx('Você entrou na família!', 'You joined the family!')); await A().loadFamily(); A().picker(); } catch (x) { toast(A().inviteErr(x), 4500); } };
-        return ($('#nx').onclick = next);
+        return ($('#nx').onclick = () => { marcaVisto(); next(); });
       }
       if (s === 'parabens') {
         const item = (e, t, b) => `<div class="flex gap-3 items-start bg-surface-container-lowest border-2 border-surface-container-high rounded-2xl p-3.5"><span class="text-[28px] leading-none">${e}</span><span class="text-body-md text-on-surface"><b>${t}</b><br><span class="text-on-surface-variant">${b}</span></span></div>`;

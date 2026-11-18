@@ -848,6 +848,17 @@
     });
   }
 
+  // convites com mensagem pronta (app/convites.js é a fonte única, usada também na página secreta de endereços)
+  function convitesAdmin(o) {
+    const cs = window.QK_CONVITES ? QK_CONVITES(o) : [];
+    if (!cs.length) return '';
+    const msg = (txt, flag) => `<div class="bg-surface-container-lowest rounded-xl p-3 space-y-2"><p class="text-label-sm text-on-surface-variant">${flag} ${tx('Mensagem pronta', 'Ready message')}</p>
+      <pre class="whitespace-pre-wrap break-words text-[12px] leading-snug text-on-surface font-sans max-h-40 overflow-y-auto">${esc(txt)}</pre>
+      <div class="grid grid-cols-2 gap-2"><button data-copy="${esc(txt)}" class="h-9 rounded-lg bg-primary-container text-on-primary text-label-sm">📋 ${tx('Copiar mensagem', 'Copy message')}</button><a href="https://wa.me/?text=${encodeURIComponent(txt)}" target="_blank" rel="noopener" class="h-9 rounded-lg bg-[#25D366] text-white text-label-sm flex items-center justify-center">💬 WhatsApp</a></div></div>`;
+    return `<div id="g-convites" class="pt-3 space-y-3"><h3 class="text-headline-md text-on-surface">📨 ${tx('Convites com mensagem pronta', 'Invites with ready messages')}</h3>
+      ${cs.map(c => `<details class="bg-surface-container-low rounded-xl p-3"><summary class="text-label-lg text-on-surface cursor-pointer">${c.icone} ${pt() ? c.titulo : c.tituloEn}</summary>
+        <div class="space-y-2 mt-2"><p class="text-body-sm text-on-surface-variant">${esc(c.sobre)}</p>${msg(c.pt, '🇧🇷')}${msg(c.en, '🇺🇸')}</div></details>`).join('')}</div>`;
+  }
   // todos os endereços, em português e inglês, para não errar ao mandar
   function linksAdmin(d) {
     const o = location.origin;
@@ -863,6 +874,7 @@
     (d.afiliados || []).forEach(a => L.push(['🤝', tx('Parceiro ', 'Partner ') + esc(a.codigo) + (a.nome ? ' · ' + esc(a.nome) : '') + ` · ${a.indicados || 0} ${tx('cadastros', 'sign-ups')}`, o + '/?ref=' + a.codigo, o + '/en/?ref=' + a.codigo]));
     const b = (u, f) => `<div class="flex items-center gap-2 min-w-0"><span class="text-[18px]">${f}</span><code class="flex-1 min-w-0 truncate text-[12px] text-on-surface-variant">${esc(u.replace(/^https?:\/\//, ''))}</code><button data-copy="${esc(u)}" class="shrink-0 h-8 px-3 rounded-lg bg-primary-container text-on-primary text-label-sm">${tx('Copiar', 'Copy')}</button></div>`;
     return `<div class="space-y-2">${L.map(([ic, t, pt2, en]) => `<div class="border-b border-surface-container-high pb-2"><p class="text-label-md text-on-surface mb-1">${ic} ${t}</p>${b(pt2, '🇧🇷')}${b(en, '🇺🇸')}</div>`).join('')}</div>
+      ${convitesAdmin(o)}
       <details class="bg-surface-container-low rounded-xl p-3"><summary class="text-label-md text-primary cursor-pointer">${tx('Como testar um link de parceiro', 'How to test a partner link')}</summary>
         <ol class="list-decimal pl-5 mt-2 space-y-1 text-body-sm text-on-surface-variant">
           <li>${tx('Abra o link do parceiro numa <b>janela anônima</b> (ou outro celular).', 'Open the partner link in a <b>private window</b> (or another phone).')}</li>
@@ -1076,14 +1088,14 @@
       resumo: ['resumo'], simulado: ['resumo', '#simsave'], corrigir: ['corrigir'], criancas: ['criancas'], nova_crianca: ['criancas', '#novak'], conta: ['conta'],
       planos: ['conta', '#planos, #portal, #assinar'], convite: ['conta', '#ivm'], parceiro: ['conta', '#afc'], pais: ['conta', '[data-pais]'], senha: ['conta', '[data-senha]'], painel: ['conta', '#gest'] };
     // painel de gestão (só administradores): cada seção tem um id g-…
-    ['links', 'assin', 'uso', 'iatop', 'erros', 'comis', 'feed', 'rep', 'quico', 'custo', 'contas', 'tema'].forEach(k => { M['g_' + k] = ['gestao', '#g-' + k]; });
+    ['links', 'convites', 'assin', 'uso', 'iatop', 'erros', 'comis', 'feed', 'rep', 'quico', 'custo', 'contas', 'tema'].forEach(k => { M['g_' + k] = ['gestao', '#g-' + k]; });
     const m = M[d]; if (!m) return;
     if (d === 'nova_crianca') { tab = 'criancas'; newChild(false); return; }
     tab = m[0]; render();
     const DICA = { g_contas: tx('Busque pelo e-mail e toque em Apagar. Apagar é para sempre.', 'Search by email and tap Delete. Deleting is permanent.'), material: tx('Aqui 👇 toque em "Tirar foto" ou "Fotos ou PDF".', 'Here 👇 tap "Take photo" or "Photos or PDF".') };
     if (m[1]) { let n = 0; const t = setInterval(() => { const el = document.querySelector(m[1]); if (el || ++n > 25) { clearInterval(t); if (el) {
       // rola até a seção inteira (não só o botão) e destaca, para a pessoa ver exatamente onde está
-      const alvo = el.tagName === 'SECTION' ? el : (el.closest('section') || el);
+      const alvo = el.tagName === 'SECTION' || /^g-/.test(el.id) ? el : (el.closest('section') || el);
       alvo.style.scrollMarginTop = '96px'; alvo.scrollIntoView({ behavior: 'smooth', block: alvo.offsetHeight > innerHeight * 0.7 ? 'start' : 'center' });
       alvo.classList.add('ring-4', 'ring-secondary-container', 'rounded-xl'); setTimeout(() => alvo.classList.remove('ring-4', 'ring-secondary-container'), 4000);
       if (DICA[d]) setTimeout(() => toast(DICA[d]), 700); } } }, 200); }
