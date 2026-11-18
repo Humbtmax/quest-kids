@@ -10,10 +10,11 @@
     const iso = d => new Date(Date.now() - d * 864e5).toISOString(), f = 'fam-demo', k = 'kid-gabi';
     const sess = (d, min, ok, tot, extra) => Object.assign({ id: 'demo-t' + d, crianca_id: k, familia_id: f, tipo: 'licao', licao_id: 'L0' + d, iniciada_em: iso(d), duracao_seg: min * 60, acertos: ok, total: tot, estrelas: Math.round(5 * ok / tot), itens: [], pendentes: 0 }, extra || {});
     const db = {
-      familias: [{ id: f, nome: 'Família Demo' }], membros: [{ familia_id: f, user_id: 'demo-user', papel: 'dono' }],
+      familias: [{ id: f, nome: 'Família Demo', termos_aceitos_em: iso(10), termos_versao: '2026-11-17' }], membros: [{ familia_id: f, user_id: 'demo-user', papel: 'dono' }],
       assinaturas: [{ familia_id: f, plano: 'teste', status: 'trialing', com_ia: true, valido_ate: new Date(Date.now() + 7 * 864e5).toISOString() }],
       criancas: [{ id: k, familia_id: f, apelido: 'Gabi', avatar: '🦄', idade: 10, serie: '5th grade', idioma_app: 'en', idiomas: ['en', 'pt-BR'], estilo: 'rosa', tema: 'claro', minutos: 20, pacote: 'gabi-en5', dias: [1, 2, 3, 4, 5], pilares: { leitura: 40, palavras: 25, reforco: 35 }, criado_em: iso(10) }],
-      progresso: [], materiais: [], licoes: [], convites: [], ia_tarefas: [], pins: [], senha_pais: '2026',
+      progresso: [], licoes: [], convites: [], ia_tarefas: [], pins: [], senha_pais: '2026',
+      materiais: [['m1', 'pronto', 3, 'estudo', 'Science — states of matter', 'chapter 4, pages 30–35', null], ['m2', 'pronto', 3, 'estudo', 'Science — states of matter', 'chapter 4, pages 30–35', null], ['m3', 'enviado', 0.1, 'prova', 'Math — fractions', 'the teacher said mixed numbers will be on it', iso(-3).slice(0, 10)]].map(([id, status, d, tipo, materia, obs, dp]) => ({ id, familia_id: f, crianca_id: k, caminho: f + '/' + id + '.jpg', materia, obs, tipo, lote: 'lote-' + tipo, modo_prova: tipo === 'prova', data_prova: dp, status, criado_em: iso(d), apagar_em: iso(d - 7) })),
       tentativas: [sess(1, 21, 8, 10, { itens: [{ qid: 'demo-txt', station: 'reforco', status: 'pending', at: iso(1), prompt: 'Describe a real situation at school where someone could be **magnanimous**.', rubric: '2 = a clear situation where someone forgives or is generous; 1 = vague; 0 = off-topic.', answer: 'When my friend broke my pencil and said sorry, I said it was ok and gave her another one.' }], pendentes: 1 }), sess(2, 18, 6, 9), sess(4, 24, 9, 10)]
     };
     try {
@@ -226,7 +227,7 @@
     if (db.familias && db.precos && db.precos.length) return db;
     if (!db.familias) {
     const f = 'fam-demo';
-    db.familias = [{ id: f, nome: 'Família Demo' }];
+    db.familias = [{ id: f, nome: 'Família Demo', termos_aceitos_em: null, termos_versao: null }];
     db.membros = [{ familia_id: f, user_id: 'demo-user', papel: 'dono' }];
     db.assinaturas = [{ familia_id: f, plano: 'teste', status: 'trialing', com_ia: true, valido_ate: new Date(Date.now() + 7 * 864e5).toISOString() }];
     db.criancas = []; db.progresso = []; db.tentativas = []; db.materiais = []; db.licoes = []; db.convites = []; db.ia_tarefas = []; db.pins = [];
@@ -268,6 +269,7 @@
       if (fn === 'conferir_pin') { const p = db.pins.find(p => p.crianca_id === a.crianca); return !p || p.pin === a.pin; }
       if (fn === 'tem_pin') return !!db.pins.find(p => p.crianca_id === a.crianca);
       if (fn === 'tem_senha_pais') return !!db.senha_pais;
+      if (fn === 'aceitar_termos') { (db.familias || []).forEach(x => { x.termos_aceitos_em = new Date().toISOString(); x.termos_versao = a.versao; }); dsave(db); return null; }
       if (fn === 'definir_senha_pais') { if (!/^\d{4}$/.test(a.senha)) throw new Error('A senha precisa ter 4 números'); db.senha_pais = a.senha; dsave(db); return null; }
       if (fn === 'conferir_senha_pais') return !!db.senha_pais && db.senha_pais === a.senha;
       if (fn === 'vagas_fundador') return 100;

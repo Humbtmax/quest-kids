@@ -147,11 +147,19 @@
 
   /* ---------- correção ---------- */
   const norm = s => String(s ?? '').toLowerCase().replace(/[$€£,]|r\$|cubic|units?|unidades?|cm|m²|m³/g, '').replace(/\s+/g, ' ').trim();
+  // valor de "3/4", "1 3/4", "2" ou "1.5" (frações equivalentes contam como certas)
+  function fracVal(x) {
+    const t = String(x ?? '').trim(); let m;
+    if ((m = t.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)$/))) return +m[3] ? +m[1] + m[2] / m[3] : null;
+    if ((m = t.match(/^(\d+)\s*\/\s*(\d+)$/))) return +m[2] ? m[1] / m[2] : null;
+    return null;
+  }
   E.check = function (q, ans) {
     if (q.type === 'mc') return ans === (q.answer || 0);
+    if (q.type === 'num' && fracVal(ans) !== null && (q.answers || [q.answer]).some(x => fracVal(x) !== null && Math.abs(fracVal(x) - fracVal(ans)) < 1e-9 && /\//.test(String(x)))) return true;
     if (q.type === 'num') { const a = norm(ans); return (q.answers || [q.answer]).some(x => { const b = norm(x); return a === b || (!isNaN(parseFloat(a)) && parseFloat(a) === parseFloat(b) && /^[\d.\s-]+$/.test(a)); }); }
     if (q.type === 'order') return JSON.stringify(ans) === JSON.stringify(q.items);
-    if (q.type === 'sort') return q.items.every((it, i) => ans[i] === it.b);
+    if (q.type === 'sort') return q.items.every((it, i) => ans[i] === it.b || ans[i] === q.buckets[it.b]);
     if (q.type === 'match') return ans === true;
     if (q.type === 'text') return null;
     return false;
@@ -159,15 +167,19 @@
   E.answerText = function (q) {
     if (q.type === 'mc') return q.options[q.answer || 0];
     if (q.type === 'num') return (q.answers || [q.answer])[0];
-    if (q.type === 'order') return q.items.join(' → ');
-    if (q.type === 'sort') return q.items.map(i => `${i.t} = ${i.b}`).join('; ');
+    if (q.type === 'order') return q.items.map((t, i) => `${i + 1}. ${t}`).join('\n');
+    if (q.type === 'sort') return q.buckets.map((b, k) => `**${b}:** ${q.items.filter(i => i.b === k || i.b === b).map(i => i.t).join(', ')}`).join('\n');
     return '';
   };
 
   /* ---------- sessão do dia ---------- */
   E.minutesToday = function () { return Math.floor(((this.prog.dias[today()] || {}).seg || 0) / 60); };
-  E.goalMin = function () { return Math.max(15, Math.min(60, +this.child.minutos || 20)); };
-  E.goalDone = function () { return this.minutesToday() >= this.goalMin(); };
+  E.goalMin = function () { return Math.max(10, Math.min(60, +this.child.minutos || 15)); };
+  /* meta do dia em ATIVIDADES (páginas lidas + perguntas): vale a constância, não o relógio */
+  E.goalSteps = function () { return Math.min(40, Math.round(this.goalMin() * 0.6 + 4)); };
+  E.stepsToday = function () { const d = this.prog.dias[today()] || {}; return (d.q || 0) + (d.pg || 0); };
+  E.goalDone = function () { return this.stepsToday() >= this.goalSteps() || this.minutesToday() >= this.goalMin(); };
+  E.dayPct = function () { return Math.min(1, Math.max(this.stepsToday() / this.goalSteps(), this.minutesToday() / this.goalMin())); };
 
   E.startSession = function (opts) {
     opts = opts || {};
@@ -175,8 +187,9 @@
     const P = Object.assign({ leitura: 40, palavras: 25, reforco: 35 }, this.child.pilares || {});
     const tot = P.leitura + P.palavras + P.reforco || 100;
     const left = opts.more ? 10 * 60 : Math.max(5 * 60, goal - done);
+    const cap = opts.more ? 8 : Math.max(6, this.goalSteps() - this.stepsToday());
     const S = this.s = {
-      id: uid(), started: new Date().toISOString(), more: !!opts.more, sec: 0, earned: 0,
+      id: uid(), started: new Date().toISOString(), more: !!opts.more, sec: 0, earned: 0, cap, units: 0, wordsEnd: null, P,
       targets: { leitura: left * P.leitura / tot, palavras: left * P.palavras / tot, reforco: left * P.reforco / tot },
       spent: { leitura: 0, palavras: 0, reforco: 0 }, station: opts.more ? 'palavras' : 'leitura',
       queue: [], items: [], used: [], reading: opts.more ? null : (opts.reading || this.nextReading()), readingDone: false, matched: false, pageRec: [], pagesSec: []
@@ -220,23 +233,29 @@
     return false;
   };
 
-  /** próximo passo da sessão (ou null = acabou) */
+  /** próximo passo da sessão (ou null = acabou). A sessão tem um número fixo de atividades (S.cap). */
   E.next = function () {
-    const S = this.s; const order = ['leitura', 'palavras', 'reforco'];
-    for (let guard = 0; guard < 40; guard++) {
+    const S = this.s; const tot = S.targets.leitura + S.targets.palavras + S.targets.reforco;
+    for (let guard = 0; guard < 60; guard++) {
       if (S.queue.length) {
         const it = S.queue.shift();
-        if (it.kind === 'q') { const q = this.question(it.qid); if (!q) continue; S.used.push(it.qid); return Object.assign({ q, station: S.station }, it); }
-        return Object.assign({ station: S.station }, it);
+        // passou do limite: só termina o texto que já começou; perguntas extras ficam para outro dia
+        if (S.units >= S.cap && (S.station !== 'leitura' || it.source === 'similar')) continue;
+        if (it.kind === 'q') { const q = this.question(it.qid); if (!q) continue; S.used.push(it.qid); S.units++; return Object.assign({ q, station: S.station }, it); }
+        S.units++; return Object.assign({ station: S.station }, it);
       }
-      if (S.station === 'leitura') { S.readingDone = !!S.reading; S.station = 'palavras'; continue; }
-      const total = S.targets.leitura + S.targets.palavras + S.targets.reforco;
-      if (S.sec >= total && S.items.length >= 3) return null;
-      const stationFull = S.spent[S.station] >= S.targets[S.station] + (S.station === 'palavras' ? Math.max(0, S.targets.leitura - S.spent.leitura) : 0);
-      if (S.station === 'palavras' && stationFull) { S.station = 'reforco'; continue; }
+      if (S.station === 'leitura') {
+        S.readingDone = !!S.reading; S.station = 'palavras';
+        const rest = Math.max(0, S.cap - S.units), pw = S.P.palavras, pr = S.P.reforco;
+        S.wordsEnd = S.units + Math.round(rest * (pw + pr ? pw / (pw + pr) : 0.4));
+        continue;
+      }
+      if (S.units >= S.cap) return null;
+      if (S.sec >= tot * 1.6 && S.items.length >= 3) return null;      // segurança: nunca muito além do tempo combinado
+      if (S.wordsEnd === null) S.wordsEnd = S.units + Math.round((S.cap - S.units) * (S.P.palavras + S.P.reforco ? S.P.palavras / (S.P.palavras + S.P.reforco) : 0.4));
+      if (S.station === 'palavras' && S.units >= S.wordsEnd) { S.station = 'reforco'; continue; }
       if (this.fillStation()) continue;
-      const i = order.indexOf(S.station);
-      if (i < 2) { S.station = order[i + 1]; continue; }
+      if (S.station === 'palavras') { S.station = 'reforco'; continue; }
       return null;
     }
     return null;
@@ -247,6 +266,7 @@
     S.sec += sec; S.spent[S.station] = (S.spent[S.station] || 0) + sec;
     const d = today(); const day = this.prog.dias[d] = this.prog.dias[d] || { seg: 0, q: 0, ok: 0 }; day.seg += sec;
     day.pil = day.pil || {}; day.pil[S.station] = (day.pil[S.station] || 0) + sec;
+    if (kind === 'page') day.pg = (day.pg || 0) + 1;
   };
 
   /** registra uma resposta; devolve {ok, coins} */
@@ -303,7 +323,7 @@
       id: S.id, crianca_id: this.child.id, licao_id: S.reading ? S.reading.id : 'PRATICA-' + d, tipo: S.more ? 'pratica' : 'daily', pilar: 'misto',
       iniciada_em: S.started, terminada_em: new Date().toISOString(), duracao_seg: Math.round(S.sec), total: S.items.length,
       acertos: S.items.filter(i => i.correct).length, pendentes: S.items.filter(i => i.status === 'pending').length, nota_pct: pct, estrelas: stars,
-      itens: S.items, leitura: S.reading ? { titulo: S.reading.title, pages: S.pagesSec, recordings: S.pageRec } : null
+      itens: S.items, leitura: S.reading ? { titulo: S.reading.title, pages: S.pagesSec, recordings: S.pageRec, medidor: S.meters || null } : null
     };
     return { att, pct, firstPct, stars, coins: S.earned, bonus, newBadges, right: graded.filter(i => i.correct).length, total: graded.length };
   };

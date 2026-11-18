@@ -107,6 +107,7 @@
     A.fam = { id: m.familia_id, papel: m.papel };
     const [subs, kids] = await Promise.all([DB.sel('assinaturas', { eq: { familia_id: A.fam.id } }), DB.sel('criancas', { eq: { familia_id: A.fam.id }, order: 'criado_em.asc' })]);
     A.sub = subs[0] || { plano: 'teste', status: 'trialing' };
+    A.famRow = await DB.sel('familias', { eq: { id: A.fam.id } }).then(r => r[0] || null).catch(() => null);
     A.kids = kids.filter(k => !k.arquivada);
   }
   A.loadFamily = loadFamily;
@@ -128,7 +129,8 @@
       if (conv) { sessionStorage.removeItem('qk.convite'); try { await DB.rpc('aceitar_convite', { cod: conv }); toast('✅ ' + P('Convite aceito', 'Invite accepted')); } catch (x) { toast(x.message); } }
       await loadFamily();
       if (/[?&]pago=1/.test(location.search)) { toast(P('🎉 Assinatura confirmada! Obrigado.', '🎉 Subscription confirmed! Thank you.'), 4000); history.replaceState(null, '', location.pathname); }
-      if (!A.kids.length) return QKParent.newChild(true);
+      if (!A.kids.length) return QKOnboard.start({ first: true });
+      if (QKOnboard.needTerms()) return QKOnboard.terms(picker);
       picker();
     } catch (x) {
       if (x.message === 'sessao') return authScreen('entrar');
@@ -142,7 +144,7 @@
 
   /* ================= quem vai estudar ================= */
   function picker() {
-    theme('simples', adultTema()); A.kid = null; A.eng = null;
+    theme('simples', adultTema()); A.kid = null; A.eng = null; A.ret = null;
     const tl = A.trialLeft();
     view(`<main class="min-h-screen px-margin md:px-margin-tablet py-10 max-w-4xl mx-auto">
       <div class="flex items-center gap-3 mb-8">${logo}<span class="text-headline-md text-on-surface">Quest Kids</span></div>
@@ -154,13 +156,26 @@
           <div class="w-24 h-24 rounded-full bg-primary-fixed/60 flex items-center justify-center text-[52px] shadow-inner">${esc(k.avatar || '⭐')}</div>
           <span class="text-headline-md text-on-surface">${esc(k.apelido)}</span>
           <span class="text-label-sm text-on-surface-variant">${k.minutos} min · ${k.idioma_app === 'en' ? 'English' : 'Português'}</span></button>`).join('')}
+        ${A.kids.length < 3 ? `<button id="addk" class="rounded-3xl p-5 border-2 border-dashed border-primary-container/60 flex flex-col items-center justify-center gap-3 text-primary active:scale-95 transition hover:bg-primary-fixed/20 min-h-[200px]">
+          <div class="w-24 h-24 rounded-full bg-primary-fixed/40 flex items-center justify-center">${I('person_add', 'text-[44px]')}</div>
+          <span class="text-headline-md">${P('Adicionar criança', 'Add a child')}</span><span class="text-label-sm text-on-surface-variant">${P('Grátis · cada uma com seu PIN', 'Free · each with their own PIN')}</span></button>` : ''}
       </div>
       <button id="pais" class="mt-8 w-full sm:w-auto px-6 h-14 rounded-2xl bg-surface-container text-on-surface text-label-lg inline-flex items-center justify-center gap-2 hover:bg-surface-container-high">${I('shield_person', 'text-[22px] text-primary')} ${t('areaPais')}</button>
     </main>`);
     app().querySelectorAll('[data-k]').forEach(b => b.onclick = () => pinPad(A.kids.find(k => k.id === b.dataset.k)));
-    $('#pais').onclick = parentGate;
+    $('#pais').onclick = () => parentGate();
+    const ak = $('#addk'); if (ak) ak.onclick = () => parentGate(() => QKOnboard.start({ first: false }));
   }
   A.picker = picker;
+
+  /* ---------- atalho 🔒 da criança direto para a senha dos pais ---------- */
+  function toParents(resume) {
+    const kid = A.kid;
+    A.ret = { kid, go: () => { A.ret = null; A.kid = kid; theme(kid.estilo, kid.tema); document.documentElement.lang = kid.idioma_app === 'en' ? 'en' : 'pt-BR'; resume(); } };
+    parentGate();
+  }
+  A.backFromParents = () => { if (A.ret && A.ret.kid && A.eng) return A.ret.go(); A.ret = null; picker(); };
+  const gateBack = () => A.backFromParents();
 
   /* ---------- senha dos pais (4 números) ---------- */
   const flag = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } };
@@ -173,14 +188,14 @@
         <div class="flex justify-center gap-4 mb-2">${[0, 1, 2, 3].map(i => `<span class="w-5 h-5 rounded-full border-[3px] border-primary-container ${i < pin.length ? 'bg-primary-container' : ''}"></span>`).join('')}</div>
         <div class="text-label-md text-error min-h-[1.4em] mb-2">${msg || ''}</div>
         <div class="grid grid-cols-3 gap-3 justify-items-center max-w-[280px] mx-auto">${[1, 2, 3, 4, 5, 6, 7, 8, 9, '←', 0, ''].map(n => n === '' ? '<span></span>' : `<button data-n="${n}" class="w-20 h-20 rounded-full bg-surface-container-lowest soft-shadow text-headline-lg text-on-surface active:scale-90 transition">${n === '←' ? I('backspace', 'text-[26px]') : n}</button>`).join('')}</div>
-        ${extra || ''}<a href="#" id="v" class="block mt-5 text-label-md text-primary underline">${t('voltar')}</a></div></main>`);
+        ${extra || ''}<a href="#" id="v" class="block mt-5 text-label-md text-primary underline">${A.ret ? P('Voltar para ', 'Back to ') + esc(A.ret.kid.apelido) : t('voltar')}</a></div></main>`);
       app().querySelectorAll('[data-n]').forEach(b => b.onclick = () => {
         const n = b.dataset.n;
         if (n === '←') pin = pin.slice(0, -1); else if (pin.length < 4) pin += n;
         if (pin.length === 4) { const p = pin; pin = ''; return onDone(p, draw); }
         draw();
       });
-      $('#v').onclick = e => { e.preventDefault(); picker(); };
+      $('#v').onclick = e => { e.preventDefault(); gateBack(); };
       document.onkeydown = e => { if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return; const k = e.key === 'Backspace' ? '←' : e.key; const b = /^[0-9]$|^←$/.test(k) && app().querySelector(`[data-n="${k}"]`); if (b) b.click(); };
       const fg = $('#forgot'); if (fg) fg.onclick = async e => {
         e.preventDefault();
@@ -200,26 +215,27 @@
     });
   }
   A.createParentPass = createParentPass;
-  async function parentGate() {
+  async function parentGate(then) {
+    const ok = then || (() => QKParent.open());
     let has;
     try { has = await DB.rpc('tem_senha_pais', {}); } catch (e) { has = null; }   // null: banco ainda sem a senha dos pais (04-senha-pais.sql)
-    if (has === null) return mathGate();
-    if (!has || flag('qk.novaSenha') === '1') return createParentPass(() => QKParent.open());
+    if (has === null) return mathGate(ok);
+    if (!has || flag('qk.novaSenha') === '1') return createParentPass(ok);
     padScreen(t('areaPais'), P('Digite a senha dos pais', 'Enter the parents password'), async (p, draw) => {
-      const ok = await DB.rpc('conferir_senha_pais', { senha: p }).catch(() => false);
-      if (ok) return QKParent.open(); draw(P('Senha errada. Tente de novo.', 'Wrong password. Try again.'));
+      const ok2 = await DB.rpc('conferir_senha_pais', { senha: p }).catch(() => false);
+      if (ok2) return ok(); draw(P('Senha errada. Tente de novo.', 'Wrong password. Try again.'));
     }, `<a href="#" id="forgot" class="block mt-5 text-label-sm text-on-surface-variant underline">${P('Esqueci a senha', 'Forgot password')}</a>`);
   }
-  function mathGate() {
+  function mathGate(then) {
     const a = 6 + Math.floor(Math.random() * 4), b = 6 + Math.floor(Math.random() * 4);
     view(`<main class="min-h-screen flex items-center justify-center px-margin"><div class="w-full max-w-sm bg-surface-container-lowest rounded-3xl p-6 soft-shadow text-center space-y-4">
       <div class="w-14 h-14 mx-auto rounded-2xl bg-surface-container text-primary flex items-center justify-center">${I('lock', 'text-[30px]')}</div>
       <h2 class="text-headline-lg-mobile text-on-surface">${t('areaPais')}</h2><p class="text-body-md text-on-surface-variant">${t('paisPergunta')} <b class="text-on-surface text-headline-md">${a} × ${b} = ?</b></p>
       <input id="g" inputmode="numeric" autocomplete="off" class="${inputCls} text-center text-headline-md"><div id="e" class="text-label-md text-error min-h-[1.2em]"></div>
       ${btnPrimary('ok', t('continuar'), 'arrow_forward')}<a href="#" id="v" class="block text-label-md text-primary underline">${t('voltar')}</a></div></main>`);
-    const go = () => { if (+$('#g').value === a * b) QKParent.open(); else { $('#e').textContent = t('errado'); $('#g').value = ''; } };
+    const go = () => { if (+$('#g').value === a * b) (then || (() => QKParent.open()))(); else { $('#e').textContent = t('errado'); $('#g').value = ''; } };
     $('#ok').onclick = go; $('#g').onkeydown = e => { if (e.key === 'Enter') go(); }; $('#g').focus();
-    $('#v').onclick = e => { e.preventDefault(); picker(); };
+    $('#v').onclick = e => { e.preventDefault(); gateBack(); };
   }
 
   async function pinPad(kid) {
@@ -280,6 +296,7 @@
         <div class="flex items-center gap-2">
           <span class="flex items-center gap-1 bg-secondary-container/20 px-2.5 py-1 rounded-full">${I('local_fire_department', 'text-secondary text-[18px]', 1)}<span class="text-label-sm text-on-secondary-container">${p.streak || 0}</span></span>
           <span class="flex items-center gap-1 bg-surface-container-high px-2.5 py-1 rounded-full">${I('monetization_on', 'text-secondary text-[18px]', 1)}<span class="text-label-sm text-on-surface">${p.points || 0}</span></span>
+          <button id="lk" title="${L('Área dos pais', 'Parents area')}" aria-label="${L('Área dos pais', 'Parents area')}" class="w-8 h-8 rounded-full flex items-center justify-center text-outline opacity-70">${I('lock', 'text-[18px]')}</button>
           <button id="tm" title="${A.kid.tema === 'escuro' ? kt('claro') : kt('escuro')}" class="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface shadow-sm">${I(A.kid.tema === 'escuro' ? 'light_mode' : 'dark_mode', 'text-[20px]', 1)}</button>
           <button id="sw" title="${kt('trocar')}" class="w-9 h-9 rounded-full bg-primary-fixed/60 flex items-center justify-center text-[20px] shadow-sm">${esc(A.kid.avatar || '⭐')}</button>
         </div></div></header>`;
@@ -292,8 +309,9 @@
       </div></nav>`;
   }
   function wireNav() {
-    app().querySelectorAll('[data-nav]').forEach(b => b.onclick = () => ({ hoje: kidHome, bib: library, prem: rewards, prog: progress })[b.dataset.nav]());
+    app().querySelectorAll('[data-nav]').forEach(b => b.onclick = async () => { if (b.dataset.nav === 'hoje') await refreshKid(); ({ hoje: kidHome, bib: library, prem: rewards, prog: progress })[b.dataset.nav](); });
     const sw = $('#sw'); if (sw) sw.onclick = () => picker();
+    const lk = $('#lk'); if (lk) lk.onclick = () => { const cur = (app().querySelector('[data-nav].text-primary') || {}).dataset; const fn = ({ hoje: kidHome, bib: library, prem: rewards, prog: progress })[(cur && cur.nav) || 'hoje']; toParents(async () => { await refreshKid(); fn(); }); };
     const tm = $('#tm'); if (tm) tm.onclick = () => {
       const k = A.kid; k.tema = k.tema === 'escuro' ? 'claro' : 'escuro'; theme(k.estilo, k.tema);
       const cur = (app().querySelector('[data-nav].text-primary') || {}).dataset; ({ hoje: kidHome, bib: library, prem: rewards, prog: progress })[(cur && cur.nav) || 'hoje']();
@@ -305,7 +323,7 @@
 
   /* ---------- Hoje ---------- */
   function kidHome() {
-    const e = A.eng, p = e.prog, goal = e.goalMin(), mins = e.minutesToday(), pct = Math.min(1, mins / goal);
+    const e = A.eng, p = e.prog, goal = e.goalMin(), mins = e.minutesToday(), pct = e.dayPct(), stepsN = e.stepsToday(), stepsG = e.goalSteps();
     const next = e.nextReading(); const done = e.goalDone();
     const PP = Object.assign({ leitura: 40, palavras: 25, reforco: 35 }, A.kid.pilares || {}); const tot = PP.leitura + PP.palavras + PP.reforco || 100;
     const day = p.dias[today()] || {}; const pil = day.pil || {};
@@ -323,10 +341,7 @@
         <div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden"><div class="${bar} h-full rounded-full" style="width:${pp(k)}%"></div></div></div>`;
     const greet = `<div class="space-y-3">
         <div class="flex items-center justify-between flex-wrap gap-2">
-          <div class="flex items-center gap-2">
-            <span class="inline-flex items-center gap-1.5 bg-secondary-container/20 px-3 py-1.5 rounded-full shadow-sm">${I('local_fire_department', 'text-secondary text-[20px]', 1)}<span class="text-label-md text-on-secondary-container">${p.streak || 0} ${kt('dias')}</span></span>
-            <span class="inline-flex items-center gap-1.5 bg-secondary-fixed/50 px-3 py-1.5 rounded-full shadow-sm">${I('monetization_on', 'text-secondary text-[20px]', 1)}<span class="text-label-md text-on-secondary-fixed-variant">${p.points || 0}</span></span>
-          </div>
+          <span></span>
           <span class="flex items-center gap-1 bg-surface-container-high px-3 py-1 rounded-full">${I('verified', 'text-primary text-[18px]')}<span class="text-label-sm text-on-surface-variant">${kt('nivel')} ${lv.n}</span></span>
         </div>
         <div><h1 class="text-headline-xl-mobile md:text-headline-xl text-on-surface tracking-tight">${kt('ola')}, ${esc(A.kid.apelido)}! 👋</h1>
@@ -340,10 +355,10 @@
           <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
             <div class="w-10 h-10 rounded-full bg-primary-container/15 flex items-center justify-center mb-1 text-primary-container">${I(done ? 'celebration' : 'school', 'text-[24px]')}</div>
             <span class="text-headline-md text-on-surface">${kt('licaoHoje')}</span>
-            <span class="text-label-lg text-primary mt-0.5">${mins} ${kt('de')} ${goal} ${kt('min')}</span>
+            <span class="text-label-lg text-primary mt-0.5">${Math.min(stepsN, stepsG)} ${kt('de')} ${stepsG} ${L('atividades', 'activities')}</span>
             <span class="text-label-sm text-on-surface-variant mt-1">${done ? kt('metaFeita') : mins ? L('Continue de onde parou!', 'Pick up where you left off!') : L('Falta pouco para começar!', 'Ready when you are!')}</span>
           </div></div>
-        <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-surface-container-low rounded-full">${I('timer', 'text-[16px] text-primary')}<span class="text-label-sm text-on-surface-variant">${L('Meta diária', 'Daily goal')}: ${goal} min</span></div></div>`;
+        <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-surface-container-low rounded-full">${I('timer', 'text-[16px] text-primary')}<span class="text-label-sm text-on-surface-variant">${L('Hoje', 'Today')}: ${mins} min · ${L('meta', 'goal')} ~${goal} min</span></div></div>`;
     const adv = next ? `<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex items-center gap-3">
         <div class="w-14 h-14 rounded-xl bg-secondary-fixed/60 overflow-hidden shrink-0 flex items-center justify-center text-3xl">${next.image ? `<img class="w-full h-full object-cover" src="${esc(next.image)}" alt="">` : esc(next.icon || '📖')}</div>
         <div class="flex-1 min-w-0"><div class="flex items-center gap-1.5">${I('stars', 'text-secondary text-[16px]', 1)}<span class="text-label-sm text-secondary uppercase tracking-wider">${L('Aventura do dia', "Today's adventure")}</span></div>
@@ -465,8 +480,16 @@
 
   /* ================= lição ================= */
   let Ls = null;
-  function runLesson(opts) {
+  /* pega as configurações mais novas da criança (os pais podem ter mudado agora no painel deles) */
+  async function refreshKid() {
+    try {
+      const r = await Promise.race([DB.sel('criancas', { eq: { id: A.kid.id } }), new Promise((_, no) => setTimeout(() => no(new Error('t')), 2500))]);
+      if (r && r[0]) { ['minutos', 'pilares', 'dias', 'tema', 'estilo', 'idioma_app'].forEach(k => { if (r[0][k] !== undefined) A.kid[k] = r[0][k]; }); A.eng.child = A.kid; theme(A.kid.estilo, A.kid.tema); }
+    } catch (e) { /* sem internet: usa o que já tem */ }
+  }
+  async function runLesson(opts) {
     if (!A.planOk()) return toast(kt('planoVencido'));
+    await refreshKid();
     const e = A.eng; const S = e.startSession(opts);
     Ls = { t0: Date.now(), hidden: 0, hidAt: null, step: null, n: 0 };
     if (!S.reading && !opts.more && !e.dueWords(1).length && !e.pack && !e.licoes.length) { toast(kt('semConteudo')); return kidHome(); }
@@ -479,18 +502,18 @@
   /* topo da lição: fechar, passo, tempo, moedas, barra e matéria */
   function lessonTop(chip) {
     const S = A.eng.s; const goal = S.targets.leitura + S.targets.palavras + S.targets.reforco;
-    const pct = Math.min(100, Math.round(100 * S.sec / goal));
-    const totalSteps = Math.max(Ls.n + S.queue.length, Math.round(goal / 50));
+    const totalSteps = Math.max(S.cap, Ls.n, S.station === 'leitura' ? S.units + S.queue.length : 0);
+    const pct = Math.min(100, Math.round(100 * Math.max(0, Ls.n - 1) / totalSteps));
     const st = { leitura: ['menu_book', kt('leitura')], palavras: ['spellcheck', kt('palavras')], reforco: ['auto_stories', kt('reforco')] }[S.station];
     return `<header class="fixed top-0 inset-x-0 z-40 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.03)]"><div class="h-16 px-margin max-w-2xl mx-auto flex items-center justify-between gap-2">
         <div class="flex items-center gap-2 min-w-0">${logo}<h1 class="text-headline-md text-on-surface truncate">${L('Sessão de estudo', 'Study session')}</h1></div>
-        <div class="w-9 h-9 rounded-full bg-primary-fixed/60 flex items-center justify-center text-[20px]">${esc(A.kid.avatar || '⭐')}</div></div></header>
+        <div class="flex items-center gap-1.5"><button id="lk" title="${L('Área dos pais', 'Parents area')}" aria-label="${L('Área dos pais', 'Parents area')}" class="w-8 h-8 rounded-full flex items-center justify-center text-outline opacity-70">${I('lock', 'text-[18px]')}</button><div class="w-9 h-9 rounded-full bg-primary-fixed/60 flex items-center justify-center text-[20px]">${esc(A.kid.avatar || '⭐')}</div></div></div></header>
       <main class="pt-20 pb-36 px-margin max-w-2xl mx-auto">
       <div class="flex items-center justify-between gap-2 mb-3">
         <button id="x" aria-label="Fechar" class="w-11 h-11 flex items-center justify-center rounded-full bg-surface-container text-on-surface shadow-sm active:scale-90 shrink-0">${I('close', 'text-[20px]')}</button>
         <div class="flex items-center gap-1.5 min-w-0">
           <span class="bg-surface-container px-3 py-1.5 rounded-full text-label-sm text-on-surface shadow-sm whitespace-nowrap">${L('Passo', 'Step')} ${Ls.n} ${L('de', 'of')} ${totalSteps}</span>
-          <span class="bg-surface-container-low px-3 py-1.5 rounded-full text-label-sm text-on-surface-variant flex items-center gap-1 whitespace-nowrap">${I('timer', 'text-[16px] text-tertiary')}${Math.floor(S.sec / 60)}/${Math.round(goal / 60)} min</span>
+          <span class="bg-surface-container-low px-3 py-1.5 rounded-full text-label-sm text-on-surface-variant flex items-center gap-1 whitespace-nowrap">${I('timer', 'text-[16px] text-tertiary')}${Math.max(1, Math.round(S.sec / 60))} min</span>
         </div>
         <span class="flex items-center gap-1 bg-secondary-container text-on-secondary-container px-3 py-1.5 rounded-full text-label-sm shadow-sm whitespace-nowrap">${I('star', 'text-[16px]', 1)}+${S.earned}</span>
       </div>
@@ -500,8 +523,21 @@
         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary-fixed/50 text-on-primary-fixed-variant text-label-sm">${I(st[0], 'text-[14px]')}${st[1]}</span>
       </div>`;
   }
+  // botão logo abaixo da resposta (perto de onde a criança está olhando)
+  const nearBottom = inner => `<div class="mt-5 mb-4 space-y-2" id="near">${inner}</div></main>`;
   const lessonBottom = inner => `</main><div class="fixed bottom-0 inset-x-0 z-30 pb-safe bg-gradient-to-t from-surface via-surface to-transparent pt-6"><div class="max-w-2xl mx-auto px-margin pb-4 space-y-2">${inner}</div></div>`;
   function wireTop() {
+    const lk = $('#lk'); if (lk) lk.onclick = () => {
+      // pausa o tempo da lição enquanto os pais mexem; depois volta para o mesmo passo
+      stopSpeak(); if (rec && rec.state === 'recording') try { rec.stop(); } catch (e) {}
+      const st = Ls && Ls.step; if (Ls) Ls.hidAt = Date.now();
+      toParents(async () => {
+        await refreshKid(); if (!Ls || !A.eng || !A.eng.s) return kidHome();
+        if (Ls.hidAt) { Ls.hidden += Date.now() - Ls.hidAt; Ls.hidAt = null; }
+        if (!st) return nextStep();
+        return st.kind === 'page' ? pageStep(st) : st.kind === 'match' ? matchStep(st) : qStep(st);
+      });
+    };
     $('#x').onclick = () => {
       const box = document.createElement('div');
       box.className = 'fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4';
@@ -535,15 +571,29 @@
   }
 
   /* ---- ouvir (voz do aparelho) ---- */
+  let speakOn = false;
   function speak(text, btn) {
-    if (!('speechSynthesis' in window)) return toast(L('Seu aparelho não lê em voz alta.', "Your device can't read aloud."));
-    if (speechSynthesis.speaking) { stopSpeak(); return; }
-    const u = new SpeechSynthesisUtterance(String(text).replace(/\[\[([^|\]]+)\|[^\]]+\]\]/g, '$1').replace(/[*_#>]/g, ''));
-    u.lang = isPt() ? 'pt-BR' : 'en-US'; u.rate = 0.92;
-    u.onend = () => btn && btn.classList.remove('ring-4');
-    btn && btn.classList.add('ring-4'); speechSynthesis.speak(u);
+    const sy = window.speechSynthesis;
+    if (!sy || !window.SpeechSynthesisUtterance) return toast(L('Seu aparelho não lê em voz alta.', "Your device can't read aloud."));
+    if (speakOn) { stopSpeak(); btn && btn.classList.remove('ring-4'); return; }
+    const lang = isPt() ? 'pt-BR' : 'en-US';
+    const clean = String(text).replace(/\[\[([^|\]]+)\|[^\]]+\]\]/g, '$1').replace(/[*_#>]/g, '');
+    // frases curtas: o Safari do iPhone corta textos longos
+    const parts = clean.match(/[^.!?\n]+[.!?]*\s*/g) || [clean];
+    const voices = sy.getVoices(); const voice = voices.find(v => v.lang === lang) || voices.find(v => v.lang && v.lang.slice(0, 2) === lang.slice(0, 2));
+    try { sy.cancel(); } catch (e) {}
+    let started = false; speakOn = true; btn && btn.classList.add('ring-4');
+    parts.filter(t => t.trim()).forEach((t, i, all) => {
+      const u = new SpeechSynthesisUtterance(t.trim()); u.lang = lang; u.rate = 0.92; if (voice) u.voice = voice;
+      u.onstart = () => { started = true; };
+      if (i === all.length - 1) u.onend = () => { speakOn = false; btn && btn.classList.remove('ring-4'); };
+      u.onerror = () => { speakOn = false; btn && btn.classList.remove('ring-4'); };
+      sy.speak(u);
+    });
+    try { sy.resume(); } catch (e) {}
+    setTimeout(() => { if (!started && speakOn) toast(L('Não ouviu? Tire o celular do modo silencioso (botão na lateral do iPhone) e aumente o volume.', "Can't hear it? Turn off silent mode (the switch on the side of the iPhone) and turn up the volume."), 5000); }, 1800);
   }
-  function stopSpeak() { try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {} }
+  function stopSpeak() { speakOn = false; try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {} }
 
   /* ---- página de leitura (Ler em voz alta) ---- */
   let rec = null, raf = null;
@@ -563,7 +613,8 @@
       <div class="bg-surface-container-lowest rounded-2xl p-5 md:p-6 soft-shadow mb-5 space-y-4">
         <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-primary-container"></span><span class="text-label-sm text-on-surface-variant uppercase tracking-wider">${kt('pagina')} ${n} ${L('de', 'of')} ${R.pages.length}</span></div>
         ${R.wordParts && n === 1 ? `<div class="flex flex-wrap gap-1.5">${R.wordParts.map(w => `<span class="bg-tertiary-fixed text-on-tertiary-fixed px-2.5 py-1 rounded-lg text-label-sm">${esc(w[0])} = ${esc(w[1])}</span>`).join('')}</div>` : ''}
-        <div class="text-body-lg md:text-[20px] md:leading-[32px] text-on-surface leading-relaxed space-y-3"><p>${md(text)}</p></div>
+        <div id="psg" class="text-body-lg md:text-[20px] md:leading-[32px] text-on-surface leading-relaxed space-y-3"><p>${md(text)}</p></div>
+        <div id="meter"></div>
         ${R.image && n === 1 ? `<div class="w-full h-40 rounded-xl overflow-hidden"><img class="w-full h-full object-cover" src="${esc(R.image)}" alt=""></div>` : ''}
         ${R.audio && n === 1 ? `<audio controls preload="none" src="${esc(R.audio)}" class="w-full"></audio>` : ''}
         <div class="flex items-center justify-between text-label-sm text-on-surface-variant bg-surface-container-low px-3 py-2 rounded-xl"><span>💡 ${L('Dica: faça uma pausa suave na vírgula!', 'Tip: pause gently at commas!')}</span><span class="text-primary">${words} ${L('palavras', 'words')}</span></div>
@@ -579,7 +630,7 @@
           </div></div>` : ''}${btnPrimary('ok', L('Pronto! Continuar', 'Done! Continue'), 'arrow_forward')}`)}`);
     wireTop();
     $('#ouvir').onclick = ev => R.audio && n === 1 ? (app().querySelector('audio') || {}).play && app().querySelector('audio').play() : speak(text, ev.currentTarget);
-    if (aloud) $('#rec').onclick = () => toggleRec(n);
+    if (aloud) { $('#rec').onclick = () => toggleRec(n); const m = (S.meters || {})[n]; if (m) showMeter(m); }
     $('#ok').onclick = () => {
       if (rec && rec.state === 'recording') { rec.stop(); setTimeout(() => $('#ok') && $('#ok').click(), 700); return; }
       stopSpeak();
@@ -588,6 +639,75 @@
       persist(false); nextStep();
     };
   }
+  /* ---- medidor de leitura (reconhecimento de voz grátis do navegador; é uma ESTIMATIVA) ---- */
+  const meterOn = () => { try { return localStorage.getItem('qk.medidor') !== '0'; } catch (e) { return true; } };
+  const normW = w => String(w).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9']/g, '').replace(/'/g, '');
+  function near(a, b) {
+    if (a === b) return true; if (!a || !b) return false;
+    if (a.length < 4 || b.length < 4) return false;
+    if (Math.abs(a.length - b.length) > 1) return a.startsWith(b) || b.startsWith(a);
+    let d = 0, i = 0, j = 0; while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } if (++d > 1) return false; if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; } }
+    return d + (a.length - i) + (b.length - j) <= 1;
+  }
+  let MT = null;
+  function wrapWords() {
+    const box = $('#psg'); if (!box) return [];
+    if (!box.querySelector('.rw')) {
+      const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT); const nodes = []; let x; while ((x = walker.nextNode())) nodes.push(x);
+      let k = 0;
+      nodes.forEach(t => { if (!t.textContent.trim()) return; const frag = document.createDocumentFragment(); t.textContent.split(/(\s+)/).forEach(part => { if (!part) return; if (/^\s+$/.test(part) || !normW(part)) frag.appendChild(document.createTextNode(part)); else { const sp = document.createElement('span'); sp.className = 'rw rounded transition-colors'; sp.dataset.w = k++; sp.textContent = part; frag.appendChild(sp); } }); t.parentNode.replaceChild(frag, t); });
+    }
+    return [...box.querySelectorAll('.rw')];
+  }
+  function align(words, heard) {
+    let i = 0; const got = new Set();
+    heard.forEach(h => { if (!h) return; for (let j = i; j < Math.min(words.length, i + 4); j++) if (near(words[j], h)) { got.add(j); i = j + 1; return; } });
+    return { pos: i, got };
+  }
+  function meterStart(n) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR || !meterOn()) { MT = null; return; }
+    const spans = wrapWords(); if (spans.length < 5) { MT = null; return; }
+    spans.forEach(s => s.classList.remove('bg-tertiary-fixed', 'bg-primary-fixed', 'meter-miss'));
+    MT = { n, spans, words: spans.map(s => normW(s.textContent)), base: [], cur: [], t0: Date.now(), live: true, res: { pos: 0, got: new Set() } };
+    const st = MT;
+    const go = () => {
+      let r; try { r = new SR(); } catch (e) { return; }
+      r.lang = isPt() ? 'pt-BR' : 'en-US'; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+      r.onresult = ev => {
+        const all = []; for (let k = 0; k < ev.results.length; k++) all.push(ev.results[k][0].transcript);
+        st.cur = all.join(' ').split(/\s+/).map(normW).filter(Boolean);
+        st.res = align(st.words, st.base.concat(st.cur));
+        st.spans.forEach((s, k) => { s.classList.toggle('bg-primary-fixed', st.res.got.has(k)); s.classList.toggle('bg-tertiary-fixed', k === st.res.pos); });
+        const cw = st.spans[st.res.pos]; if (cw && cw.getBoundingClientRect().bottom > innerHeight - 170) cw.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      };
+      r.onerror = () => {};
+      r.onend = () => { st.base = st.base.concat(st.cur); st.cur = []; if (st.live && MT === st) setTimeout(go, 150); };
+      try { r.start(); st.r = r; } catch (e) {}
+    };
+    go();
+  }
+  function meterStop(n) {
+    const st = MT; if (!st || st.n !== n) return; st.live = false; try { st.r && st.r.stop(); } catch (e) {}
+    setTimeout(() => {
+      const res = st.res, att = res.pos, ok = res.got.size, min = Math.max(0.1, (Date.now() - st.t0) / 60000);
+      st.spans.forEach(s => s.classList.remove('bg-tertiary-fixed'));
+      if (att < 5) { showMeter({ vazio: true }); return; }
+      const pulou = []; for (let k = 0; k < att; k++) if (!res.got.has(k)) { st.spans[k].classList.add('meter-miss'); if (pulou.length < 8) pulou.push(st.spans[k].textContent.replace(/[^\p{L}\p{N}'-]/gu, '')); }
+      const m = { wpm: Math.round(att / min), wcpm: Math.round(ok / min), acc: Math.round(100 * ok / att), palavras: att, pulou };
+      const S = A.eng && A.eng.s; if (S) { S.meters = S.meters || {}; S.meters[n] = m; }
+      showMeter(m);
+    }, 600);
+  }
+  function showMeter(m) {
+    const box = $('#meter'); if (!box) return;
+    box.innerHTML = m.vazio ? `<p class="text-body-sm text-on-surface-variant bg-surface-container-low rounded-xl p-3">📏 ${L('Não deu para medir desta vez (o microfone não ouviu bem). Tudo bem, a gravação vale!', "Couldn't measure this time (the mic didn't hear well). That's ok, the recording counts!")}</p>`
+      : `<div class="bg-primary-fixed/30 rounded-2xl p-3.5 space-y-2"><p class="text-label-md text-on-surface flex items-center gap-1.5">📏 ${L('Medidor de leitura', 'Reading meter')} <span class="text-label-sm text-on-surface-variant font-normal">(${L('estimativa', 'estimate')})</span></p>
+        <div class="grid grid-cols-3 gap-2 text-center"><div class="bg-surface-container-lowest rounded-xl p-2"><b class="text-headline-md text-on-surface block">${m.wpm}</b><span class="text-label-sm text-on-surface-variant">${L('palavras/min', 'words/min')}</span></div>
+        <div class="bg-surface-container-lowest rounded-xl p-2"><b class="text-headline-md text-on-surface block">${m.wcpm}</b><span class="text-label-sm text-on-surface-variant">${L('certas/min', 'correct/min')}</span></div>
+        <div class="bg-surface-container-lowest rounded-xl p-2"><b class="text-headline-md text-on-surface block">${m.acc}%</b><span class="text-label-sm text-on-surface-variant">${L('acerto', 'accuracy')}</span></div></div>
+        ${m.pulou && m.pulou.length ? `<p class="text-body-sm text-on-surface-variant">${L('Palavras para treinar (puladas ou trocadas):', 'Words to practice (skipped or changed):')} <b class="text-on-surface">${m.pulou.map(esc).join(', ')}</b></p>` : `<p class="text-body-sm text-on-surface-variant">${L('Nenhuma palavra pulada. Parabéns! 🌟', 'No skipped words. Great job! 🌟')}</p>`}</div>`;
+  }
+
   async function toggleRec(n) {
     const S = A.eng.s, btn = $('#rec'), st = $('#recst'), timer = $('#rect'), ping = $('#ping'), sig = $('#sig');
     if (rec && rec.state === 'recording') { rec.stop(); return; }
@@ -608,7 +728,7 @@
       };
       rec.ondataavailable = ev => ev.data.size && chunks.push(ev.data);
       rec.onstop = async () => {
-        cancelAnimationFrame(raf); try { ctx && ctx.close(); } catch (e) {}
+        meterStop(n); cancelAnimationFrame(raf); try { ctx && ctx.close(); } catch (e) {}
         stream.getTracks().forEach(x => x.stop()); ping && ping.classList.add('hidden'); btn.innerHTML = I('mic', 'text-[36px]', 1); btn.classList.remove('bg-error');
         bars.forEach(b => b.style.height = '6px');
         const blob = new Blob(chunks, { type: rec.mimeType || 'audio/mp4' }); const dur = Math.round((Date.now() - t0) / 1000);
@@ -619,7 +739,7 @@
         try { await DB.upload('familia-gravacoes', path, blob); S.pageRec = S.pageRec.filter(r => r.page !== n); S.pageRec.push({ at: new Date().toISOString(), dur, mime: blob.type, page: n, path, bucket: 'familia-gravacoes' }); st.textContent = kt('gravado') + ' ' + L('Muito bem! 🌟', 'Great job! 🌟'); }
         catch (x) { st.textContent = '⚠️ ' + x.message; }
       };
-      rec.start(); ping && ping.classList.remove('hidden'); btn.innerHTML = I('stop', 'text-[36px]', 1); btn.classList.add('bg-error');
+      rec.start(); meterStart(n); ping && ping.classList.remove('hidden'); btn.innerHTML = I('stop', 'text-[36px]', 1); btn.classList.add('bg-error');
       st.textContent = L('Gravando sua voz… Fale com clareza!', 'Recording… Speak clearly!'); loop();
     } catch (x) { st.textContent = kt('semMic'); }
   }
@@ -635,12 +755,21 @@
     const instr = { order: kt('ordene'), sort: kt('separe') }[q.type] || '';
     const badge = step.source === 'similar' ? `<span class="bg-secondary-fixed text-on-secondary-fixed px-2.5 py-0.5 rounded-full text-label-sm uppercase tracking-wide">${L('Parecida', 'Similar')}</span>`
       : (step.source === 'review' || step.source === 'wordrev') ? `<span class="bg-error-container text-on-error-container px-2.5 py-0.5 rounded-full text-label-sm uppercase tracking-wide">${L('Revisão', 'Review')}</span>` : '';
+    const fracQ = q.type === 'num' && (q.answers || [q.answer]).some(x => /\d\s*\/\s*\d/.test(String(x)));
+    const mixedQ = fracQ && (q.answers || [q.answer]).some(x => /^\s*\d+\s+\d+\s*\/\s*\d+/.test(String(x)));
     const ready = () => q.type === 'mc' ? ans !== null : q.type === 'num' || q.type === 'text' ? !!String(ans || '').trim() : q.type === 'order' ? picked.length === q.items.length : q.type === 'sort' ? Object.keys(placed).length === q.items.length : false;
     const optCls = (sel) => `relative w-full flex items-center justify-between min-h-[64px] px-4 py-3.5 rounded-xl bg-surface-container-lowest text-left transition-all active:scale-[0.98] ${sel ? 'shadow-[0_4px_16px_rgba(20,163,163,0.14)] ring-2 ring-primary-container' : 'shadow-[0_2px_8px_rgba(0,0,0,0.05)]'}`;
     const body = () => {
       if (q.type === 'mc') return `<div class="grid gap-3.5 ${q.options.every(o => String(o).length < 28) ? 'md:grid-cols-2' : ''}">${order.map((i, k) => `<button data-i="${i}" class="${optCls(ans === i)}">
           <span class="flex items-center gap-3.5 flex-1 min-w-0 pr-2"><span class="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-label-lg ${ans === i ? 'bg-primary-container text-on-primary' : 'bg-surface-container text-on-surface-variant'}">${'ABCDEF'[k]}</span><span class="text-body-md text-on-surface leading-snug ${ans === i ? 'font-bold' : ''}">${md(q.options[i])}</span></span>
           <span class="w-6 h-6 shrink-0 rounded-full flex items-center justify-center ${ans === i ? 'bg-primary-container' : 'bg-surface-container'}">${ans === i ? I('check', 'text-[16px] text-white') : ''}</span></button>`).join('')}</div>`;
+      if (q.type === 'num' && fracQ) {
+        const box = (id, ph) => `<input id="${id}" data-fr inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="4" placeholder="${ph}" class="w-20 h-16 rounded-2xl bg-surface-container-lowest border-2 border-surface-container-high focus:border-primary-container focus:outline-none text-headline-lg text-center text-on-surface">`;
+        return `<div class="flex items-center justify-center gap-4 py-2">
+          ${mixedQ ? `<div class="flex flex-col items-center gap-1">${box('fw', '')}<span class="text-label-sm text-on-surface-variant">${L('inteiros', 'wholes')}</span></div>` : ''}
+          <div class="flex flex-col items-center gap-2">${box('fn', '')}<div class="w-24 h-1.5 rounded-full bg-on-surface"></div>${box('fd', '')}</div></div>
+          <p class="text-center text-body-sm text-on-surface-variant">${mixedQ ? L('Número misto? Use a caixa da esquerda para os inteiros (deixe vazia se não tiver).', 'Mixed number? Use the left box for the wholes (leave it empty if none).') : L('Número de cima e número de baixo da fração.', 'Top number and bottom number of the fraction.')}</p>`;
+      }
       if (q.type === 'num') return `<input id="in" inputmode="decimal" autocomplete="off" placeholder="${kt('digite')}" value="${esc(ans || '')}" class="${inputCls} h-16 text-headline-lg text-center">`;
       if (q.type === 'text') return `<textarea id="in" rows="4" placeholder="${kt('escreva')}" class="w-full p-4 rounded-2xl bg-surface-container-lowest border-2 border-surface-container-high focus:border-primary-container focus:outline-none text-body-lg text-on-surface">${esc(ans || '')}</textarea>`;
       if (q.type === 'order') return `<div class="bg-surface-container-lowest rounded-2xl p-3 min-h-[70px] space-y-2 shadow-sm">${picked.map((i, k) => `<div class="flex items-center gap-2 bg-primary-fixed/40 rounded-xl px-3 py-2"><span class="w-7 h-7 rounded-full bg-primary-container text-on-primary flex items-center justify-center text-label-md">${k + 1}</span><span class="text-body-md text-on-surface">${md(q.items[i])}</span></div>`).join('') || `<span class="text-body-sm text-outline px-2">…</span>`}</div>
@@ -661,12 +790,18 @@
         ${q.hint ? (hint ? `<div class="flex items-center gap-3 p-3.5 mt-5 rounded-xl bg-surface-container-low shadow-sm"><div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center shrink-0 text-on-secondary-container">${I('lightbulb', 'text-[18px]')}</div><p class="text-body-sm text-on-surface-variant leading-snug">${md(q.hint)}</p></div>`
           : `<button id="hint" class="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-low text-label-md text-on-surface-variant">${I('lightbulb', 'text-[18px] text-secondary')} ${L('Ver dica', 'Show hint')}</button>`) : ''}
         <div id="fb"></div>
-        ${lessonBottom(`<button id="ok" type="button" ${ready() ? '' : 'disabled'} class="btn3d w-full h-14 rounded-xl bg-primary-container text-on-primary text-headline-md flex items-center justify-center gap-2"><span>${kt('conferir')}</span>${I('arrow_forward', 'text-[22px]')}</button>`)}`);
+        ${nearBottom(`<button id="ok" type="button" ${ready() ? '' : 'disabled'} class="btn3d w-full h-14 rounded-xl bg-primary-container text-on-primary text-headline-md flex items-center justify-center gap-2"><span>${kt('conferir')}</span>${I('arrow_forward', 'text-[22px]')}</button>`)}`);
       wireTop(); wire();
     };
     const wire = () => {
       app().querySelectorAll('[data-i]').forEach(b => b.onclick = () => { if (answered) return; ans = +b.dataset.i; draw(); });
-      const inp = $('#in'); if (inp) { inp.oninput = () => { ans = inp.value; $('#ok').disabled = !ready(); }; if (q.type === 'num') inp.onkeydown = e => { if (e.key === 'Enter' && ready()) $('#ok').click(); }; }
+      if (fracQ) {
+        const frs = [...app().querySelectorAll('[data-fr]')];
+        const upd = () => { const w = ($('#fw') || {}).value || '', n = $('#fn').value.trim(), dd = $('#fd').value.trim(); ans = n && dd ? (w.trim() ? w.trim() + ' ' : '') + n + '/' + dd : ''; $('#ok').disabled = !ready(); };
+        frs.forEach(f => { f.oninput = () => { f.value = f.value.replace(/\D/g, ''); upd(); }; f.onfocus = () => setTimeout(() => { const nb = $('#near'); nb && nb.scrollIntoView({ block: 'end', behavior: 'smooth' }); }, 350); });
+        ($('#fw') || $('#fn')).focus();
+      }
+      const inp = $('#in'); if (inp) { inp.onfocus = () => setTimeout(() => { const nb = $('#near'); nb && nb.scrollIntoView({ block: 'end', behavior: 'smooth' }); }, 350); inp.oninput = () => { ans = inp.value; $('#ok').disabled = !ready(); }; if (q.type === 'num') inp.onkeydown = e => { if (e.key === 'Enter' && ready()) $('#ok').click(); }; }
       app().querySelectorAll('[data-t]').forEach(b => b.onclick = () => { const i = +b.dataset.t; if (q.type === 'order') { if (!picked.includes(i)) picked.push(i); } else selTile = i; draw(); });
       app().querySelectorAll('[data-b]').forEach(b => b.onclick = e => { const un = e.target.closest('[data-un]'); if (un) { delete placed[un.dataset.un]; draw(); return; } if (selTile !== null) { placed[selTile] = b.dataset.b; selTile = null; draw(); } });
       const u = $('#undo'); if (u) u.onclick = () => { picked.pop(); draw(); };
@@ -686,7 +821,7 @@
       fb.innerHTML = r.ok === null
         ? `<div class="mt-5 bg-tertiary-fixed text-on-tertiary-fixed rounded-2xl p-4 flex items-center gap-3">${I('edit_note', 'text-[28px]')}<span class="text-label-lg">${kt('enviado')}</span></div>`
         : `<div class="mt-5 bg-primary-container/15 rounded-2xl p-4 flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-primary-container text-on-primary flex items-center justify-center shrink-0">${I('check', 'text-[24px]', 1)}</div><div class="flex-1"><p class="text-headline-md text-primary">${msgs[Math.floor(Math.random() * msgs.length)]}</p>${q.explain ? `<p class="text-body-sm text-on-surface-variant mt-0.5">${md(q.explain)}</p>` : ''}</div><span class="text-label-lg text-secondary">+${r.coins} 🪙</span></div>`;
-      const ok = $('#ok'); ok.innerHTML = `<span>${kt('proxima')}</span>${I('arrow_forward', 'text-[22px]')}`; ok.disabled = false; ok.onclick = () => { stepSecs(); nextStep(); };
+      const ok = $('#ok'); ok.innerHTML = `<span>${kt('proxima')}</span>${I('arrow_forward', 'text-[22px]')}`; ok.disabled = false; ok.onclick = () => { tickStep('q'); nextStep(); };
       setTimeout(() => fb.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     };
     draw();
@@ -695,16 +830,20 @@
   /* tela "Tudo bem se enganar!" (Stitch: feedback de erro) */
   function wrongScreen(step, q, a, chip) {
     const why = (window.WHY || {})[q.id];
-    const chosen = q.type === 'mc' ? q.options[a] : Array.isArray(a) ? a.join(' → ') : a;
+    const chosen = q.type === 'mc' ? q.options[a]
+      : q.type === 'sort' ? q.items.map((it, i) => ({ it, put: a[i] })).filter(x => x.put !== q.buckets[x.it.b] && x.put !== x.it.b).map(x => `${x.it.t} → ${x.put || '?'}`).join('\n')
+      : q.type === 'order' && Array.isArray(a) ? a.map((t, i) => `${i + 1}. ${t}`).join('\n')
+      : Array.isArray(a) ? a.join(', ') : a;
     const wrongTxt = why && why.wrong && why.wrong[chosen];
-    const expl = q.explain || (why && why.school) || '';
+    const expl = q.explain || (why && why.school) || (q.after ? L(`A resposta está no texto, na página ${q.after}. Volte lá e procure as palavras da pergunta: "${A.eng.answerText(q)}".`, `The answer is in the story, on page ${q.after}. Go back and look for the words from the question: "${A.eng.answerText(q)}".`)
+      : L('A resposta certa está em verde acima. Leia de novo com calma e veja por que ela combina com a pergunta.', 'The right answer is in green above. Read it again calmly and see why it fits the question.'));
     const similar = !['similar', 'review'].includes(step.source) && A.eng.queueSimilar(q);
     const icons = ['cloud', 'rocket', 'pets', 'eco', 'sunny'];
     view(`${lessonTop(chip)}
       <section class="bg-surface-container-lowest rounded-3xl p-5 shadow-sm mb-4">
         <div class="flex items-center justify-between gap-2 mb-2"><span class="flex items-center gap-1.5 text-primary text-label-sm uppercase tracking-wide">${I(chip.icon, 'text-[18px]')} ${esc(chip.name)}</span>${step.source === 'review' ? `<span class="bg-error-container text-on-error-container px-2.5 py-0.5 rounded-full text-label-sm uppercase">${L('Revisão', 'Review')}</span>` : ''}</div>
         <h2 class="text-headline-lg-mobile text-on-surface mb-4">${md(q.prompt)}</h2>
-        ${chosen != null && chosen !== '' ? `<div class="bg-error-container/40 rounded-2xl p-3.5 flex items-start gap-3"><div class="w-7 h-7 rounded-full bg-error text-on-error flex items-center justify-center shrink-0 mt-0.5">${I('close', 'text-[18px]')}</div><div class="min-w-0"><span class="text-label-sm text-error uppercase tracking-wide">${L('Sua escolha:', 'Your answer:')}</span><p class="text-body-md text-on-surface line-through opacity-85">${md(String(chosen))}</p></div></div>` : ''}
+        ${chosen != null && chosen !== '' ? `<div class="bg-error-container/40 rounded-2xl p-3.5 flex items-start gap-3"><div class="w-7 h-7 rounded-full bg-error text-on-error flex items-center justify-center shrink-0 mt-0.5">${I('close', 'text-[18px]')}</div><div class="min-w-0"><span class="text-label-sm text-error uppercase tracking-wide">${q.type === 'sort' ? L('Ficou no grupo errado:', 'In the wrong group:') : q.type === 'order' ? L('Sua ordem:', 'Your order:') : L('Sua escolha:', 'Your answer:')}</span><p class="text-body-md text-on-surface ${['sort', 'order'].includes(q.type) ? '' : 'line-through'} opacity-85">${md(String(chosen))}</p></div></div>` : ''}
       </section>
       <section class="bg-surface-container-lowest rounded-3xl p-6 shadow-md mb-4 relative overflow-hidden">
         <div class="absolute -right-6 -top-6 w-32 h-32 bg-secondary-container/15 rounded-full blur-2xl pointer-events-none"></div>
@@ -717,10 +856,10 @@
             ${q.hint ? `<div class="bg-secondary-fixed/50 rounded-xl p-3 flex items-start gap-2.5">${I('travel_explore', 'text-on-secondary-fixed text-[20px] shrink-0')}<p class="text-body-sm text-on-secondary-fixed font-bold">${L('Dica do explorador', "Explorer's tip")}: ${md(q.hint)}</p></div>` : ''}</div></div>` : ''}
         <div class="flex items-center justify-center text-center p-3 rounded-2xl bg-surface-container text-on-surface-variant gap-2 relative">${I('auto_awesome', 'text-[20px] text-secondary-container', 1)}<span class="text-label-md">${similar ? L('Agora você vai tentar uma parecida. Você consegue!', "Next, you'll try a similar one. You've got this!") : L('Errar faz parte de aprender!', 'Mistakes are part of learning!')}</span></div>
       </section>
-      ${lessonBottom(btnPrimary('ok', L('Continuar', 'Continue'), 'arrow_forward'))}`);
+      ${nearBottom(btnPrimary('ok', L('Continuar', 'Continue'), 'arrow_forward'))}`);
     wireTop();
     const w = $('#why'); if (w) w.onclick = () => { const open = $('#whyt').classList.toggle('hidden') === false; w.setAttribute('aria-expanded', open); $('#whyi').style.transform = open ? 'rotate(180deg)' : ''; };
-    $('#ok').onclick = () => { stepSecs(); nextStep(); };
+    $('#ok').onclick = () => { tickStep('q'); nextStep(); };
   }
   /* desenho do prisma (caixa) para as perguntas de volume */
   function boxSVG(bx, tag) {

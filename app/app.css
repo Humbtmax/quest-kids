@@ -33,3 +33,5 @@ button { cursor: pointer; } button:disabled { opacity: .45; cursor: default; }
 @keyframes rot { to { transform: rotate(360deg); } }
 input[type=range] { accent-color: rgb(var(--c-primary-container)); width: 100%; }
 #app .grid > * { min-width: 0; }
+@keyframes qkpop { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
+.meter-miss { text-decoration: underline wavy rgb(230 140 0); text-underline-offset: 4px; }
