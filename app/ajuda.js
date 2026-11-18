@@ -6,6 +6,8 @@
   const CFG = window.QK_CONFIG || { SUPABASE_URL: 'https://wqpujoymslyajknpkdpe.supabase.co', SUPABASE_ANON_KEY: 'sb_publishable_YkSW55PojAbLpr8hCcLb5Q_5PKgBbSL', SUPORTE_EMAIL: 'rodrigok4455@gmail.com' };
   const script = document.currentScript;
   const ORIGEM = (script && script.dataset.origem) || (window.QK ? 'app' : 'site');
+  // no Painel de gestão (só administradores) o Quico vira assistente da administração
+  const modo = () => ORIGEM === 'app' && document.body.dataset.painel === 'gestao' ? 'admin' : ORIGEM;
   const lang = () => (window.QK ? QK.lang : (document.documentElement.lang || 'pt').slice(0, 2)) === 'en' ? 'en' : 'pt';
   const T = (p, e) => lang() === 'en' ? e : p;
   const base = (script && script.dataset.base) || '';
@@ -21,19 +23,25 @@
     convite: ['👪', 'Convidar responsável', 'Invite a parent'], parceiro: ['🤝', 'Indique e ganhe', 'Refer and earn'], pais: ['🌎', 'País da família', 'Family country'],
     senha: ['🔒', 'Senha dos pais', 'Parents password'], suporte: ['✉️', 'Falar com o suporte', 'Contact support'],
     criar_conta: ['✨', 'Criar conta grátis', 'Create a free account'], entrar: ['🔑', 'Entrar no app', 'Log in'], planos_site: ['⭐', 'Ver planos', 'See plans'],
+    painel: ['🛠️', 'Abrir o Painel de gestão', 'Open admin panel'], g_links: ['🔗', 'Links para mandar', 'Links to share'], g_assin: ['📈', 'Assinaturas', 'Subscriptions'], g_uso: ['📊', 'Uso', 'Usage'],
+    g_iatop: ['💸', 'Quem mais gasta IA', 'Top AI spend'], g_erros: ['⚠️', 'Erros da IA', 'AI errors'], g_comis: ['🤝', 'Comissões a pagar', 'Commissions'], g_feed: ['⭐', 'Notas das provas', 'Test results'],
+    g_rep: ['🚩', 'Perguntas com problema', 'Reported questions'], g_quico: ['💬', 'Dúvidas feitas ao Quico', 'Questions to Quico'], g_custo: ['🧮', 'Custo por envio', 'Cost per upload'], g_contas: ['👪', 'Contas', 'Accounts'], g_tema: ['🎧', 'Subir tema narrado', 'Upload a topic'],
     demo: ['🧪', 'Ver a demonstração', 'Try the demo'], como_funciona: ['💡', 'Como funciona', 'How it works'], termos: ['📜', 'Termos de Uso', 'Terms of Use'], privacidade: ['🔒', 'Privacidade', 'Privacy']
   };
   function ir(d) {
     const L = lang() === 'en' ? 'en' : 'pt', app = base + 'app/';
     if (d === 'suporte') return (location.href = 'mailto:' + CFG.SUPORTE_EMAIL + '?subject=' + encodeURIComponent('Quest Kids'));
     const site = { criar_conta: app + '?criar=1&lang=' + L, entrar: app + '?lang=' + L, demo: app + '?demo=gabi&lang=' + L, termos: base + 'termos.html' + (L === 'en' ? '#en' : ''), privacidade: base + 'privacidade.html' + (L === 'en' ? '#en' : ''), planos_site: '#planos', como_funciona: '#como-funciona' };
+    if (ORIGEM === 'app' && window.QKParent && QKParent.ir && /^(g_|painel$)/.test(d)) { fechar(); return QKParent.ir(d); }
     if (ORIGEM === 'app' && window.QKParent && QKParent.ir) { fechar(); return QKParent.ir(d); }
     const u = site[d]; if (!u) return;
     if (u[0] === '#') { fechar(); const el = document.querySelector(u) || document.querySelector('#m-' + u.slice(1)); if (el) el.scrollIntoView({ behavior: 'smooth' }); else location.hash = u; return; }
     location.href = u;
   }
 
-  const SUGEST = () => ORIGEM === 'app'
+  const SUGEST = () => modo() === 'admin'
+    ? [T('Quais links mando para um cliente?', 'Which links do I send a customer?'), T('Quanto estou gastando de IA?', 'How much am I spending on AI?'), T('Como apago uma conta de teste?', 'How do I delete a test account?'), T('Como pago as comissões?', 'How do I pay commissions?'), T('O que faço com pergunta reportada?', 'What do I do with a reported question?'), T('Como subo um tema narrado?', 'How do I upload a narrated topic?')]
+    : ORIGEM === 'app'
     ? [T('Como mando o material da escola?', 'How do I send school material?'), T('Como marco um simulado?', 'How do I set up a practice test?'), T('O que é o modo prova?', 'What is test mode?'), T('Como convido o outro responsável?', 'How do I invite the other parent?')]
     : [T('Como funciona?', 'How does it work?'), T('Quanto custa?', 'How much is it?'), T('Para qual idade é?', 'What ages is it for?'), T('É seguro para meu filho?', 'Is it safe for my child?')];
 
@@ -58,7 +66,7 @@
   @keyframes qkad{0%,80%,100%{opacity:.3;transform:none}40%{opacity:1;transform:translateY(-4px)}}
   .qka-nota{font-size:11px;opacity:.7;padding:0 12px 8px;text-align:center}`;
 
-  let box, list, hist = [], ocupado = false;
+  let box, list, hist = [], ocupado = false, modoConversa = null;
   function montar() {
     if (document.getElementById('qka-btn')) return;
     const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
@@ -77,7 +85,9 @@
   }
   function abrir() {
     box.classList.add('on'); document.getElementById('qka-btn').style.display = 'none';
-    if (!list.children.length) {
+    if (modoConversa !== modo()) { list.innerHTML = ''; hist = []; modoConversa = modo(); box.querySelector('.qka-top small').textContent = modo() === 'admin' ? T('Assistente da gestão · IA', 'Admin assistant · AI') : T('Assistente do Quest Kids · IA', 'Quest Kids assistant · AI'); }
+    if (!list.children.length && modo() === 'admin') { add('ele', T('Oi, Paula! 🛠️ Sou o Quico da gestão. Pergunte sobre o painel, contas, custos, parceiros ou o Supabase, e eu te levo à seção certa.', "Hi! 🛠️ I'm the admin Quico. Ask about the panel, accounts, costs, partners or Supabase, and I'll take you to the right section.")); chips(SUGEST().slice(0, 4), false); }
+    else if (!list.children.length) {
       add('ele', T('Oi! Eu sou o Quico 👋 Posso tirar suas dúvidas sobre o Quest Kids e te levar até a tela certa. O que você quer saber?', "Hi! I'm Quico 👋 I can answer your questions about Quest Kids and take you to the right screen. What would you like to know?"));
       chips(SUGEST(), false);
     }
@@ -112,6 +122,7 @@
   // modo demonstração do app: respostas prontas (sem gastar IA)
   function demo(p) {
     const t = p.toLowerCase();
+    if (modo() === 'admin') return { resposta: T('Na demonstração eu só mostro o caminho: as **Contas** ficam mais para baixo no Painel de gestão. Busque pelo e-mail e toque em Apagar.', 'In the demo I only show the way: **Accounts** are further down the admin panel.'), destinos: ['g_contas'], sugestoes: [T('Quanto estou gastando de IA?', 'How much am I spending on AI?')] };
     if (/material|foto|lição|lesson|photo|send/.test(t)) return { resposta: T('Na **Área dos pais → Material**, tire foto das páginas (ou mande PDF), escolha "Estudo do dia a dia" ou "Cai na prova" e toque em Enviar. Em 2 a 5 minutos vira lição. 📸 O envio fica **mais para baixo** na aba Material: o botão abaixo já te leva lá.', 'In **Parents → Material**, snap the pages (or send a PDF), pick "Everyday study" or "On the test" and tap Send. It becomes a lesson in 2–5 minutes. 📸 Sending is **further down** the Material tab: the button below takes you there.'), destinos: ['material'], sugestoes: [T('Posso mandar PDF?', 'Can I send a PDF?'), T('Quantas páginas por vez?', 'How many pages at a time?')] };
     if (/simulad|practice|test/.test(t)) return { resposta: T('No **Resumo**, em "Preparar um simulado", escolha quantas perguntas e o tempo. Ele vira a primeira atividade da próxima lição, e o resultado aparece para você primeiro. 🧪', 'In **Summary**, under "Set up a practice test", pick the number of questions and time. It becomes the first activity of the next lesson. 🧪'), destinos: ['simulado'] };
     if (/convid|invite|pai|mãe|parent/.test(t)) return { resposta: T('Em **Conta → Outro responsável**, digite o e-mail dele ou mande o convite pelo WhatsApp. Ele entra na mesma família. 👪', 'In **Account → Another parent**, type their email or send the invite by WhatsApp. 👪'), destinos: ['convite'] };
@@ -125,7 +136,7 @@
     const dots = add('ele', ''); dots.innerHTML = '<span class="qka-dots"><i></i><i></i><i></i></span>';
     let r;
     try {
-      const corpo = { acao: 'ajuda', origem: ORIGEM, lang: lang(), mensagens: hist.slice(-8) };
+      const corpo = { acao: 'ajuda', origem: modo(), lang: lang(), mensagens: hist.slice(-8) };
       if (window.QK && QK.DEMO) { await new Promise(x => setTimeout(x, 700)); r = demo(txt); }
       else if (window.QK && QK.DB && QK.Auth && QK.Auth.logged) r = await QK.DB.fn('ia', corpo);
       else { const res = await fetch(CFG.SUPABASE_URL + '/functions/v1/ia', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: CFG.SUPABASE_ANON_KEY }, body: JSON.stringify(corpo) }); r = await res.json(); if (!res.ok) throw new Error(r.error || 'erro'); }
