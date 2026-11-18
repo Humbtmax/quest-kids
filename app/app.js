@@ -301,8 +301,9 @@
     A.kid = kid; theme(kid.estilo, kid.tema); document.documentElement.lang = kid.idioma_app === 'en' ? 'en' : 'pt-BR';
     try {
       await QKEngine.loadPack(kid.pacote).catch(e => console.warn(e));
-      const [prog, lic] = await Promise.all([DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'main' } }), DB.sel('licoes', { eq: { crianca_id: kid.id }, order: 'criado_em.desc', limit: 60 })]);
+      const [prog, lic, sim] = await Promise.all([DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'main' } }), DB.sel('licoes', { eq: { crianca_id: kid.id }, order: 'criado_em.desc', limit: 60 }), DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'sim' } }).catch(() => [])]);
       A.eng = new QKEngine(kid, prog[0] && prog[0].dados, lic);
+      A.simReq = sim[0] && sim[0].dados && !sim[0].dados.feito ? sim[0].dados : null;
       if (!prog[0]) A.saveProg(true);
       kidHome();
     } catch (x) { toast(x.message); picker(); }
@@ -365,7 +366,7 @@
         <div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden"><div class="${bar} h-full rounded-full" style="width:${pp(k)}%"></div></div></div>`;
     const greet = `<div class="space-y-3">
         <div class="flex items-center justify-between flex-wrap gap-2">
-          <span></span>
+          ${(() => { const est = e.estimate(21), prev = e.estimate(7, 7), now7 = e.estimate(7); return est === null ? '<span></span>' : `<button id="nota" class="flex items-center gap-1 bg-surface-container-high px-3 py-1 rounded-full text-label-sm text-on-surface">📝 ${L('Nota estimada', 'Est. grade')} <b>${fmtNota(est)}</b>${now7 !== null && prev !== null ? (now7 > prev ? ' <span class="text-primary">↑</span>' : now7 < prev ? ' <span class="text-error">↓</span>' : '') : ''}</button>`; })()}
           <span class="flex items-center gap-1 bg-surface-container-high px-3 py-1 rounded-full">${I('verified', 'text-primary text-[18px]')}<span class="text-label-sm text-on-surface-variant">${kt('nivel')} ${lv.n}</span></span>
         </div>
         <div><h1 class="text-headline-xl-mobile md:text-headline-xl text-on-surface tracking-tight">${kt('ola')}, ${esc(A.kid.apelido)}! 👋</h1>
@@ -398,6 +399,7 @@
         <div class="space-y-5">${greet}${ring}</div>
         <div class="space-y-5 lg:pt-24">
           <div class="grid grid-cols-3 gap-2.5">${pillar('leitura', 'menu_book', 'bg-tertiary-container/15', 'text-tertiary', 'bg-tertiary-container')}${pillar('palavras', 'spellcheck', 'bg-secondary-container/20', 'text-secondary', 'bg-secondary-container')}${pillar('reforco', 'auto_stories', 'bg-primary-container/15', 'text-primary', 'bg-primary-container')}</div>
+          ${A.simReq ? `<button id="simgo" class="w-full text-left bg-tertiary-fixed text-on-tertiary-fixed rounded-2xl p-4 flex items-center gap-3 shadow-sm"><span class="text-[30px]">📝</span><span class="flex-1"><b class="text-label-lg block">${L('Simulado dos seus pais', 'Practice test from your parents')}</b><span class="text-body-sm">${A.simReq.n} ${L('perguntas', 'questions')}${A.simReq.tempo ? ` · ${A.simReq.tempo} min` : ''}</span></span>${I('chevron_right', 'text-[24px]')}</button>` : ''}
           ${adv}
           <div class="pt-1 space-y-3">${cta}
             <div class="flex items-center justify-center gap-1.5 text-center px-4 py-1"><span class="text-body-sm text-on-surface-variant">${done ? L(`Sequência de <strong class="text-on-surface">${p.streak || 0} ${(p.streak || 0) === 1 ? 'dia' : 'dias'}</strong>! Volte amanhã 🔥`, `<strong class="text-on-surface">${p.streak || 0}-day</strong> streak! Come back tomorrow 🔥`) : L(`Complete hoje para manter sua sequência de <strong class="text-on-surface">${p.streak || 0} ${(p.streak || 0) === 1 ? 'dia' : 'dias'}</strong>!`, `Finish today to keep your <strong class="text-on-surface">${p.streak || 0}-day</strong> streak!`)}</span><span>🌟</span></div>
@@ -405,6 +407,8 @@
     wireNav();
     const go = $('#go'); if (go) go.onclick = () => runLesson({});
     const m = $('#mais'); if (m) m.onclick = () => runLesson({ more: true });
+    const nb = $('#nota'); if (nb) nb.onclick = notaScreen;
+    const sg = $('#simgo'); if (sg) sg.onclick = () => runSim({ n: A.simReq.n, tempo: A.simReq.tempo, licoes: A.simReq.licoes, pais: true });
   }
   A.kidHome = kidHome;
 
@@ -442,6 +446,64 @@
   }
 
   /* ---------- Prêmios ---------- */
+  /* ---------- simulado e nota estimada ---------- */
+  const DISC_KID = () => L('É só uma estimativa, feita com as perguntas do app 😊', "It's just an estimate, based on the app's questions 😊");
+  const fmtNota = n => n === null || n === undefined ? '—' : (Math.round(n * 10) / 10).toFixed(1).replace('.', isPt() ? ',' : '.');
+  async function runSim(cfg) {
+    if (!A.planOk()) return toast(kt('planoVencido'));
+    const e = A.eng; const S = e.startSession({ simulado: cfg });
+    if (!S.cap) { toast(L('Ainda não há perguntas para um simulado. Faça algumas lições primeiro!', 'No questions for a practice test yet. Do some lessons first!')); return kidHome(); }
+    Ls = { t0: Date.now(), hidden: 0, hidAt: null, step: null, n: 0 };
+    view(`<main class="min-h-[100dvh] flex flex-col items-center justify-center text-center px-margin max-w-md mx-auto gap-4"><div class="text-[64px]">📝</div>
+      <h1 class="text-headline-xl-mobile text-on-surface">${L('Simulado', 'Practice test')}</h1>
+      <p class="text-body-lg text-on-surface-variant">${S.cap} ${L('perguntas', 'questions')}${cfg.tempo ? ` · ${cfg.tempo} min` : ''}. ${L('Como numa prova: você só vê o resultado no final.', 'Like a real test: you see the result at the end.')}</p>
+      <p class="text-body-sm text-on-surface-variant">${DISC_KID()}</p>
+      <button id="bora" class="btn3d w-full h-14 rounded-2xl bg-primary-container text-on-primary text-headline-md">${L('Começar', 'Start')} 🚀</button>
+      <button id="nao" class="text-label-md text-on-surface-variant underline">${L('Agora não', 'Not now')}</button></main>`);
+    $('#bora').onclick = () => { Ls.t0 = Date.now(); nextStep(); };
+    $('#nao').onclick = () => { e.s = null; Ls = null; kidHome(); };
+  }
+  function simResult(S, r) {
+    const e = A.eng, nota = r.total ? Math.round(100 * r.right / r.total) / 10 : 0, mins = Math.max(1, Math.round(S.sec / 60));
+    const sims = e.prog.sims || [], prev = sims.length > 1 ? sims[sims.length - 2] : null;
+    const wrong = S.items.filter(i => i.correct === false).map(i => e.question(i.qid)).filter(Boolean).slice(0, 8);
+    if (A.simReq) { DB.ins('progresso', { crianca_id: A.kid.id, chave: 'sim', dados: Object.assign({}, A.simReq, { feito: true, nota, em: new Date().toISOString() }), atualizado_em: new Date().toISOString() }, { upsert: true, onConflict: 'crianca_id,chave' }).catch(() => {}); A.simReq = null; }
+    sfx(nota >= 7 ? 'done' : 'ok');
+    view(`<main class="pt-10 pb-10 px-margin max-w-2xl mx-auto space-y-5">
+      <div class="text-center"><span class="text-label-md text-on-surface-variant uppercase tracking-wider">📝 ${L('Resultado do simulado', 'Practice test result')}</span>
+        <div class="mx-auto mt-3 w-36 h-36 rounded-full ${nota >= 7 ? 'bg-primary-container text-on-primary' : nota >= 5 ? 'bg-secondary-container text-on-secondary-container' : 'bg-error-container text-on-error-container'} flex flex-col items-center justify-center shadow-lg"><span class="text-[46px] font-black leading-none">${fmtNota(nota)}</span><span class="text-label-sm">${L('de 10', 'out of 10')}</span></div>
+        <p class="text-headline-md text-on-surface mt-3">${nota >= 9 ? L('Incrível! 🌟', 'Amazing! 🌟') : nota >= 7 ? L('Muito bem! 🎉', 'Well done! 🎉') : nota >= 5 ? L('Bom começo! 💪', 'Good start! 💪') : L('Vamos treinar mais! 💪', "Let's practice more! 💪")}</p>
+        <p class="text-body-md text-on-surface-variant">${r.right} ${L('de', 'of')} ${r.total} ${L('certas', 'right')} · ⏱️ ${mins} min${prev ? ` · ${L('antes', 'before')}: ${fmtNota(prev.nota)} ${nota > prev.nota ? '↑' : nota < prev.nota ? '↓' : '='}` : ''}</p>
+        <p class="text-body-sm text-on-surface-variant mt-1">${DISC_KID()}</p></div>
+      ${wrong.length ? `<section class="space-y-2"><h2 class="text-headline-md text-on-surface">${L('Para revisar', 'To review')}</h2>${wrong.map(q => `<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm"><p class="text-label-lg text-on-surface">${md(q.prompt)}</p><p class="text-body-md text-primary mt-1">✓ ${md(e.answerText(q))}</p>${q.explain ? `<p class="text-body-sm text-on-surface-variant mt-1">${md(q.explain)}</p>` : ''}</div>`).join('')}</section>` : ''}
+      ${btnPrimary('home', L('Voltar', 'Back'), `<span class="material-symbols-outlined text-[26px]">home</span>`)}</main>`);
+    $('#home').onclick = () => kidHome();
+  }
+  function notaScreen() {
+    const e = A.eng, p = e.prog, est = e.estimate(21);
+    const weeks = []; for (let w = 5; w >= 0; w--) weeks.push(e.estimate(7, w * 7));
+    const sims = (p.sims || []).slice(-6);
+    const pts = weeks.map((v, i) => v === null ? null : [20 + i * 52, 110 - v * 9]).filter(Boolean);
+    view(`${kidHeader(L('Minha nota', 'My grade'))}${pageMain(`<div class="max-w-xl mx-auto space-y-5 mt-2">
+      <button id="bk" class="inline-flex items-center gap-1 text-label-md text-primary">${I('arrow_back', 'text-[20px]')} ${kt('progresso')}</button>
+      <section class="bg-surface-container-lowest rounded-3xl p-5 soft-shadow text-center">
+        <p class="text-label-md text-on-surface-variant uppercase tracking-wider">${L('Nota estimada', 'Estimated grade')}</p>
+        <p class="text-[56px] font-black text-on-surface leading-tight">${fmtNota(est)}<span class="text-headline-md text-on-surface-variant">/10</span></p>
+        <p class="text-body-sm text-on-surface-variant">${est === null ? L('Faça algumas lições ou um simulado para ver sua nota.', 'Do some lessons or a practice test to see your grade.') : DISC_KID()}</p>
+        ${pts.length > 1 ? `<svg viewBox="0 0 300 120" class="w-full h-28 mt-3"><polyline fill="none" stroke="rgb(var(--c-primary-container))" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="${pts.map(x => x.join(',')).join(' ')}"/>${pts.map(x => `<circle cx="${x[0]}" cy="${x[1]}" r="5" fill="rgb(var(--c-primary))"/>`).join('')}</svg><p class="text-label-sm text-on-surface-variant">${L('Sua nota nas últimas semanas', 'Your grade in recent weeks')}</p>` : ''}
+      </section>
+      ${A.simReq ? `<div class="bg-tertiary-fixed text-on-tertiary-fixed rounded-2xl p-4 flex items-center gap-3"><span class="text-[28px]">📝</span><span class="flex-1 text-label-lg">${L('Seus pais prepararam um simulado!', 'Your parents set up a practice test!')}</span></div>` : ''}
+      <section class="bg-surface-container-lowest rounded-3xl p-5 soft-shadow space-y-3"><h2 class="text-headline-md text-on-surface">${L('Fazer um simulado', 'Take a practice test')}</h2>
+        <p class="text-body-sm text-on-surface-variant">${L('Quantas perguntas?', 'How many questions?')}</p>
+        <div class="grid grid-cols-3 gap-2">${[5, 10, 15].map(n => `<button data-sn="${n}" class="h-14 rounded-2xl bg-surface-container text-headline-md text-on-surface">${n}</button>`).join('')}</div>
+        ${A.simReq ? `<button id="simreq" class="btn3d w-full h-14 rounded-2xl bg-primary-container text-on-primary text-label-lg">${L('Fazer o simulado dos meus pais', "Take my parents' test")} (${A.simReq.n} · ${A.simReq.tempo ? A.simReq.tempo + ' min' : L('sem tempo', 'no timer')})</button>` : ''}</section>
+      ${sims.length ? `<section class="bg-surface-container-lowest rounded-3xl p-5 soft-shadow"><h2 class="text-headline-md text-on-surface mb-2">${L('Meus simulados', 'My practice tests')}</h2>${sims.slice().reverse().map(x => `<div class="flex items-center justify-between py-2 border-b border-surface-container-high last:border-0"><span class="text-body-md text-on-surface">${new Date(x.d + 'T12:00').toLocaleDateString(isPt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' })} · ${x.n} ${L('perguntas', 'questions')}</span><b class="text-label-lg ${x.nota >= 7 ? 'text-primary' : 'text-secondary'}">${fmtNota(x.nota)}</b></div>`).join('')}</section>` : ''}
+    </div>`)}${kidNav('prog')}`);
+    wireNav(); $('#bk').onclick = progress;
+    app().querySelectorAll('[data-sn]').forEach(b => b.onclick = () => runSim({ n: +b.dataset.sn }));
+    const sr = $('#simreq'); if (sr) sr.onclick = () => runSim({ n: A.simReq.n, tempo: A.simReq.tempo, licoes: A.simReq.licoes, pais: true });
+  }
+
   // como ganhar cada medalha e quanto falta [atual, meta]
   function badgeGoal(k, p) {
     const n = { first: [Object.keys(p.completed).length, 1], streak3: [p.streak || 0, 3], streak7: [p.streak || 0, 7], pts100: [p.points || 0, 100], pts500: [p.points || 0, 500], pts1000: [p.points || 0, 1000], wordwiz: [Object.keys(p.wordbank).length, 25], reader10: [Object.keys(p.completed).length, 10] }[k];
@@ -507,6 +569,16 @@
   }
 
   /* ---------- Progresso ---------- */
+  // palavras por fase: começando (caixa 1-2), desenvolvendo (3-4), dominadas (5-6)
+  const wordPhases = p => { const ph = { comecando: [], desenvolvendo: [], dominadas: [] }; Object.entries(p.wordbank || {}).forEach(([w, x]) => { const b = (x && x.box) || 1; (b >= 5 ? ph.dominadas : b >= 3 ? ph.desenvolvendo : ph.comecando).push([w, x]); }); return ph; };
+  A.wordPhases = wordPhases;
+  function sheet(html) {
+    const box = document.createElement('div');
+    box.className = 'fixed inset-0 z-50 bg-black/45 flex items-end sm:items-center justify-center p-0 sm:p-4';
+    box.innerHTML = `<div class="w-full sm:max-w-lg max-h-[85vh] overflow-y-auto bg-surface-container-lowest rounded-t-3xl sm:rounded-3xl p-5 pb-8 shadow-xl badge-pop"><div class="flex justify-end -mt-1 -mr-1"><button data-close class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">${I('close', 'text-[22px]')}</button></div>${html}</div>`;
+    document.body.appendChild(box); box.onclick = e => { if (e.target === box || e.target.closest('[data-close]')) box.remove(); };
+    return box;
+  }
   function progress() {
     const e = A.eng, p = e.prog, goal = e.goalMin(); const days = [];
     for (let i = 6; i >= 0; i--) { const d = addDays(today(), -i); days.push([d, Math.round(((p.dias[d] || {}).seg || 0) / 60)]); }
@@ -514,21 +586,67 @@
     const wk = isPt() ? ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const sk = Object.entries(p.skills).filter(([, v]) => v.right + v.wrong > 0).sort((a, b) => (b[1].right + b[1].wrong) - (a[1].right + a[1].wrong));
     const tot = days.reduce((s, x) => s + x[1], 0);
+    const ph = wordPhases(p), est = e.estimate(21);
+    // acertos dos últimos 14 dias
+    const acc = []; for (let i = 13; i >= 0; i--) { const x = p.dias[addDays(today(), -i)]; acc.push(x && x.q ? Math.round(100 * (x.ok || 0) / x.q) : null); }
+    const ap = acc.map((v, i) => v === null ? null : [10 + i * 21.5, 95 - v * 0.85]).filter(Boolean);
+    // calendário: últimos 28 dias
+    const cal = []; for (let i = 27; i >= 0; i--) { const d = addDays(today(), -i), x = p.dias[d] || {}; cal.push([d, x.seg ? ((x.seg / 60 >= goal) || ((x.q || 0) + (x.pg || 0)) >= e.goalSteps() ? 2 : 1) : 0]); }
+    const cur = e.licoes.find(l => l.foco) || e.licoes.find(l => l.modo_prova) || e.licoes[0];
+    const sample = cur ? shuffle((cur.questions || []).filter(q => q.pilar !== 'leitura')).slice(0, 3).map(q => (q.vars ? e.question(e.variant(q)) : q)).filter(Boolean) : [];
     view(`${kidHeader(kt('progresso'))}${pageMain(`
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 lg:gap-8 mt-2">
+      <div class="space-y-5">
+      <button id="minhanota" class="w-full text-left bg-surface-container-lowest rounded-3xl p-5 soft-shadow flex items-center gap-4">
+        <div class="w-16 h-16 rounded-2xl bg-primary-container text-on-primary flex flex-col items-center justify-center shrink-0"><span class="text-headline-md font-black leading-none">${fmtNota(est)}</span><span class="text-[10px]">/10</span></div>
+        <div class="flex-1 min-w-0"><b class="text-headline-md text-on-surface block">📝 ${L('Minha nota', 'My grade')}</b><span class="text-body-sm text-on-surface-variant">${L('Ver evolução e fazer um simulado', 'See progress and take a practice test')}</span></div>${I('chevron_right', 'text-[26px] text-outline')}</button>
+      ${cur ? `<section class="bg-surface-container-lowest rounded-3xl p-5 soft-shadow space-y-3">
+        <div class="flex items-center gap-2 flex-wrap"><span class="text-[26px]">${esc(cur.icone || '📸')}</span><h2 class="text-headline-md text-on-surface flex-1 min-w-0">${L('O que estou estudando', "What I'm studying")}</h2>${cur.modo_prova ? `<span class="px-2.5 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed text-label-sm">📝 ${L('Prova', 'Test')}${cur.data_prova ? ' ' + new Date(cur.data_prova + 'T12:00').toLocaleDateString(isPt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' }) : ''}</span>` : ''}</div>
+        <p class="text-label-lg text-primary">${esc(cur.titulo || (cur.passage && cur.passage.title) || '')}</p>
+        ${sample.length ? `<p class="text-label-sm text-on-surface-variant uppercase tracking-wider">${L('Algumas perguntas que estão caindo', 'Some questions you are getting')}</p><ul class="space-y-2">${sample.map(q => `<li class="bg-surface-container-low rounded-xl p-3 text-body-md text-on-surface">${md(q.prompt)}</li>`).join('')}</ul>` : ''}
+        <p class="text-body-sm text-on-surface-variant flex gap-2">${I('family_restroom', 'text-[18px] text-primary shrink-0')} ${L('Achou algo estranho? Seus pais têm todas as perguntas e respostas para revisar com você.', 'Something looks off? Your parents have all questions and answers to review with you.')}</p></section>` : ''}
       <section class="bg-surface-container-lowest rounded-3xl p-5 soft-shadow space-y-4">
         <div class="flex items-start justify-between gap-2"><div><h2 class="text-headline-md text-on-surface">${kt('semanaMin')}</h2><p class="text-body-sm text-on-surface-variant">${tot} min ${L('nos últimos 7 dias', 'in the last 7 days')}</p></div>
           <span class="flex items-center gap-1.5 bg-surface-container px-2.5 py-1 rounded-full text-label-sm text-on-surface"><span class="w-2.5 h-2.5 rounded-full bg-primary-container"></span>${L('Meta', 'Goal')}: ${goal} min</span></div>
         <div class="grid grid-cols-7 gap-2">${days.map(([d, m]) => `<div class="flex flex-col items-center gap-1"><span class="text-label-sm ${m >= goal ? 'text-primary' : 'text-on-surface-variant'}">${m}</span>
           <div class="h-28 w-full flex items-end justify-center"><div class="w-full max-w-[30px] rounded-t-lg ${m >= goal ? 'bg-primary-container' : 'bg-tertiary-container/70'}" style="height:${Math.max(3, Math.round(100 * m / max))}%"></div></div><span class="text-label-sm text-outline">${wk[new Date(d + 'T12:00').getDay()]}</span></div>`).join('')}</div>
       </section>
+      <section class="bg-surface-container-lowest rounded-3xl p-5 soft-shadow space-y-3"><h2 class="text-headline-md text-on-surface">🔥 ${L('Meus dias de estudo', 'My study days')}</h2>
+        <div class="grid grid-cols-7 gap-1.5">${cal.map(([d, v]) => `<div title="${d}" class="aspect-square rounded-lg flex items-center justify-center text-[11px] font-bold ${v === 2 ? 'bg-primary-container text-on-primary' : v === 1 ? 'bg-primary-container/35 text-on-surface' : 'bg-surface-container text-outline'} ${d === today() ? 'ring-2 ring-secondary-container' : ''}">${+d.slice(8)}</div>`).join('')}</div>
+        <p class="text-label-sm text-on-surface-variant flex gap-3 flex-wrap"><span><span class="inline-block w-3 h-3 rounded bg-primary-container align-middle"></span> ${L('meta feita', 'goal done')}</span><span><span class="inline-block w-3 h-3 rounded bg-primary-container/35 align-middle"></span> ${L('estudou um pouco', 'studied a bit')}</span></p></section>
+      </div>
       <div class="space-y-5">
-        <div class="grid grid-cols-3 gap-3">${[['spellcheck', Object.keys(p.wordbank).length, kt('palavras'), 'text-secondary'], ['menu_book', Object.keys(p.completed).length, L('Leituras', 'Readings'), 'text-tertiary'], ['local_fire_department', p.bestStreak || 0, L('Recorde', 'Best streak'), 'text-secondary']].map(([ic, n, l, c]) => `<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm text-center">${I(ic, `${c} text-[24px]`, 1)}<div class="text-headline-lg-mobile text-on-surface">${n}</div><div class="text-label-sm text-on-surface-variant">${l}</div></div>`).join('')}</div>
+        <div class="grid grid-cols-3 gap-3">${[['words', 'spellcheck', Object.keys(p.wordbank).length, kt('palavras'), 'text-secondary'], ['reads', 'menu_book', Object.keys(p.completed).length, L('Leituras', 'Readings'), 'text-tertiary'], ['streak', 'local_fire_department', p.bestStreak || 0, L('Recorde', 'Best streak'), 'text-secondary']].map(([k, ic, n, l, c]) => `<button data-pk="${k}" class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm text-center active:scale-95 transition">${I(ic, `${c} text-[24px]`, 1)}<div class="text-headline-lg-mobile text-on-surface">${n}</div><div class="text-label-sm text-on-surface-variant">${l}</div></button>`).join('')}</div>
+        <section class="bg-surface-container-lowest rounded-3xl p-5 soft-shadow space-y-3"><h2 class="text-headline-md text-on-surface">🔤 ${L('Minhas palavras', 'My words')}</h2>
+          <div class="grid grid-cols-3 gap-2">${[['comecando', '🌱', L('Começando', 'Starting')], ['desenvolvendo', '🌿', L('Treinando', 'Practicing')], ['dominadas', '🌳', L('Dominadas', 'Mastered')]].map(([k, em, n]) => `<button data-wp="${k}" class="rounded-2xl bg-surface-container-low p-3 text-center active:scale-95 transition"><div class="text-[26px]">${em}</div><div class="text-headline-md text-on-surface">${ph[k].length}</div><div class="text-label-sm text-on-surface-variant">${n}</div></button>`).join('')}</div>
+          <p class="text-body-sm text-on-surface-variant">${L('Toque para ver as palavras. Elas sobem de fase quando você acerta em dias diferentes.', 'Tap to see the words. They level up when you get them right on different days.')}</p></section>
+        ${ap.length > 1 ? `<section class="bg-surface-container-lowest rounded-3xl p-5 soft-shadow"><h2 class="text-headline-md text-on-surface">🎯 ${L('Meus acertos', 'My accuracy')}</h2><p class="text-body-sm text-on-surface-variant">${L('Últimos 14 dias', 'Last 14 days')}</p>
+          <svg viewBox="0 0 300 100" class="w-full h-28 mt-2"><line x1="0" y1="10" x2="300" y2="10" stroke="rgb(var(--c-outline-variant))" stroke-dasharray="4 4"/><polyline fill="none" stroke="rgb(var(--c-tertiary-container))" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="${ap.map(x => x.join(',')).join(' ')}"/>${ap.map(x => `<circle cx="${x[0]}" cy="${x[1]}" r="4" fill="rgb(var(--c-tertiary))"/>`).join('')}</svg></section>` : ''}
         <section class="space-y-2"><h2 class="text-headline-md text-on-surface">${kt('habilidades')}</h2>
-          ${sk.length ? sk.map(([s, v]) => { const pc = Math.round(100 * v.right / (v.right + v.wrong)); const inf = skillInfo(s); return `<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm space-y-2"><div class="flex items-center justify-between gap-2"><div class="flex items-center gap-2.5 min-w-0"><div class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">${I(inf.icon, 'text-[22px]')}</div><b class="text-label-lg text-on-surface truncate">${esc(inf.name)}</b></div><span class="text-label-md ${pc >= 80 ? 'text-primary' : pc >= 60 ? 'text-secondary' : 'text-error'}">${pc}%</span></div>
-            <div class="w-full bg-surface-container-high rounded-full h-2 overflow-hidden"><div class="h-full rounded-full ${pc >= 80 ? 'bg-primary-container' : pc >= 60 ? 'bg-secondary-container' : 'bg-error'}" style="width:${pc}%"></div></div></div>`; }).join('') : `<p class="text-body-md text-on-surface-variant bg-surface-container-low rounded-2xl p-4">${L('Faça uma lição para ver suas habilidades aqui.', 'Do a lesson to see your skills here.')}</p>`}</section>
+          ${sk.length ? sk.map(([s2, v]) => { const pc = Math.round(100 * v.right / (v.right + v.wrong)); const inf = skillInfo(s2); return `<button data-sk="${esc(s2)}" class="w-full text-left bg-surface-container-lowest rounded-2xl p-4 shadow-sm space-y-2 active:scale-[0.99] transition"><div class="flex items-center justify-between gap-2"><div class="flex items-center gap-2.5 min-w-0"><div class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">${I(inf.icon, 'text-[22px]')}</div><b class="text-label-lg text-on-surface truncate">${esc(inf.name)}</b></div><span class="flex items-center gap-1 text-label-md ${pc >= 80 ? 'text-primary' : pc >= 60 ? 'text-secondary' : 'text-error'}">${pc}% ${I('chevron_right', 'text-[18px] text-outline')}</span></div>
+            <div class="w-full bg-surface-container-high rounded-full h-2 overflow-hidden"><div class="h-full rounded-full ${pc >= 80 ? 'bg-primary-container' : pc >= 60 ? 'bg-secondary-container' : 'bg-error'}" style="width:${pc}%"></div></div></button>`; }).join('') : `<p class="text-body-md text-on-surface-variant bg-surface-container-low rounded-2xl p-4">${L('Faça uma lição para ver suas habilidades aqui.', 'Do a lesson to see your skills here.')}</p>`}</section>
       </div></div>`)}${kidNav('prog')}`);
     wireNav();
+    $('#minhanota').onclick = notaScreen;
+    app().querySelectorAll('[data-wp]').forEach(b => b.onclick = () => {
+      const k = b.dataset.wp, list = ph[k].sort((a, b2) => String(b2[1].last || b2[1].added).localeCompare(String(a[1].last || a[1].added)));
+      sheet(`<h3 class="text-headline-md text-on-surface mb-1">${{ comecando: '🌱 ' + L('Começando', 'Starting'), desenvolvendo: '🌿 ' + L('Treinando', 'Practicing'), dominadas: '🌳 ' + L('Dominadas', 'Mastered') }[k]}</h3>
+        <p class="text-body-sm text-on-surface-variant mb-3">${{ comecando: L('Palavras que você acabou de conhecer.', 'Words you just met.'), desenvolvendo: L('Você já acertou algumas vezes. Continue!', "You've got these right a few times. Keep going!"), dominadas: L('Estas você já sabe! 🎉', 'You know these! 🎉') }[k]}</p>
+        ${list.length ? `<ul class="space-y-2">${list.slice(0, 60).map(([w, x]) => `<li class="bg-surface-container-low rounded-xl p-3"><b class="text-label-lg text-on-surface">${esc(w)}</b><span class="block text-body-sm text-on-surface-variant">${esc(e.defs[w] || (x && x.def) || '')}</span></li>`).join('')}</ul>` : `<p class="text-body-md text-on-surface-variant">${L('Nenhuma ainda.', 'None yet.')}</p>`}`);
+    });
+    app().querySelectorAll('[data-pk]').forEach(b => b.onclick = () => {
+      const k = b.dataset.pk;
+      if (k === 'words') return app().querySelector('[data-wp="desenvolvendo"]').click();
+      if (k === 'reads') { const done = e.doneReadings(); return sheet(`<h3 class="text-headline-md text-on-surface mb-3">📚 ${L('Leituras que terminei', 'Readings I finished')}</h3>${done.length ? `<ul class="space-y-2">${done.map(r => `<li class="bg-surface-container-low rounded-xl p-3 flex items-center gap-3"><span class="text-[24px]">${esc(r.icon || '📖')}</span><span class="flex-1 text-label-lg text-on-surface">${esc(r.title)}</span><span>${'⭐'.repeat(Math.min(3, Math.ceil(((p.completed[r.id] || {}).stars || 0) * 3 / 5)))}</span></li>`).join('')}</ul>` : `<p class="text-body-md text-on-surface-variant">${L('Nenhuma ainda.', 'None yet.')}</p>`}`); }
+      sheet(`<div class="text-center"><div class="text-[56px]">🔥</div><h3 class="text-headline-md text-on-surface">${L('Recorde', 'Best streak')}: ${p.bestStreak || 0} ${(p.bestStreak || 0) === 1 ? L('dia', 'day') : L('dias', 'days')}</h3><p class="text-body-md text-on-surface-variant mt-2">${L(`Agora: ${p.streak || 0} ${(p.streak || 0) === 1 ? 'dia' : 'dias'} seguidos. Estude todo dia para bater o recorde!`, `Now: ${p.streak || 0}-day streak. Study every day to beat your record!`)}</p></div>`);
+    });
+    app().querySelectorAll('[data-sk]').forEach(b => b.onclick = () => {
+      const k = b.dataset.sk, v = p.skills[k] || { right: 0, wrong: 0 }, inf = skillInfo(k), pc = Math.round(100 * v.right / Math.max(1, v.right + v.wrong));
+      const exs = shuffle(e.licoes.flatMap(l => l.questions || []).concat(((window.POOL || {})[k]) || []).filter(q => q.skill === k && q.type !== 'text')).slice(0, 3).map(q => q.vars ? e.question(e.variant(q)) : q).filter(Boolean);
+      sheet(`<div class="flex items-center gap-3 mb-3"><div class="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">${I(inf.icon, 'text-[26px]')}</div><div><h3 class="text-headline-md text-on-surface">${esc(inf.name)}</h3><p class="text-body-sm text-on-surface-variant">${v.right} ${L('certas', 'right')} · ${v.wrong} ${L('para treinar', 'to practice')} · ${pc}%</p></div></div>
+        <p class="text-body-md text-on-surface bg-surface-container-low rounded-2xl p-3 mb-3">${pc >= 80 ? L('Você está mandando muito bem nisso! 🌟', "You're doing great at this! 🌟") : pc >= 60 ? L('Está quase lá. Mais um pouco de treino! 💪', 'Almost there. A bit more practice! 💪') : L('Essa é uma das que mais vão te ajudar a treinar. Errar faz parte! 💪', "This is a great one to practice. Mistakes are part of learning! 💪")}</p>
+        ${exs.length ? `<p class="text-label-sm text-on-surface-variant uppercase tracking-wider mb-2">${L('Exemplos de perguntas', 'Example questions')}</p><ul class="space-y-2">${exs.map(q => `<li class="bg-surface-container-low rounded-xl p-3 text-body-md text-on-surface">${md(q.prompt)}</li>`).join('')}</ul>` : ''}`);
+    });
   }
 
   /* ================= lição ================= */
@@ -565,7 +683,7 @@
       <div class="flex items-center justify-between gap-2 mb-3">
         <button id="x" aria-label="Fechar" class="w-11 h-11 flex items-center justify-center rounded-full bg-surface-container text-on-surface shadow-sm active:scale-90 shrink-0">${I('close', 'text-[20px]')}</button>
         <div class="flex items-center gap-1.5 min-w-0">
-          ${S.more ? `<span class="bg-secondary-container text-on-secondary-container px-3 py-1.5 rounded-full text-label-sm shadow-sm whitespace-nowrap">⭐ ${L('Extra', 'Extra')} +${Math.max(0, A.eng.minutesToday() - A.eng.goalMin())} min</span>` : `<span class="bg-surface-container px-3 py-1.5 rounded-full text-label-sm text-on-surface shadow-sm whitespace-nowrap">${L('Passo', 'Step')} ${Ls.n} ${L('de', 'of')} ${totalSteps}</span>`}
+          ${S.simulado ? `<span class="bg-tertiary-container text-on-tertiary-container px-3 py-1.5 rounded-full text-label-sm shadow-sm whitespace-nowrap">📝 ${L('Simulado', 'Practice test')} ${Ls.n}/${S.cap}</span>` : S.more ? `<span class="bg-secondary-container text-on-secondary-container px-3 py-1.5 rounded-full text-label-sm shadow-sm whitespace-nowrap">⭐ ${L('Extra', 'Extra')} +${Math.max(0, A.eng.minutesToday() - A.eng.goalMin())} min</span>` : `<span class="bg-surface-container px-3 py-1.5 rounded-full text-label-sm text-on-surface shadow-sm whitespace-nowrap">${L('Passo', 'Step')} ${Ls.n} ${L('de', 'of')} ${totalSteps}</span>`}
           <span class="bg-surface-container-low px-3 py-1.5 rounded-full text-label-sm text-on-surface-variant flex items-center gap-1 whitespace-nowrap">${I('timer', 'text-[16px] text-tertiary')}${Math.max(1, Math.round(S.sec / 60))} min</span>
         </div>
         <span class="flex items-center gap-1 bg-secondary-container text-on-secondary-container px-3 py-1.5 rounded-full text-label-sm shadow-sm whitespace-nowrap">${I('star', 'text-[16px]', 1)}+${S.earned}</span>
@@ -621,6 +739,8 @@
   function nextStep() {
     document.querySelectorAll('.defpop').forEach(x => x.remove());
     stopSpeak();
+    const SS = A.eng.s;
+    if (SS && SS.simulado && SS.simulado.tempo && SS.sec >= SS.simulado.tempo * 60) { toast(L('⏰ O tempo acabou!', "⏰ Time's up!")); return finish(false); }
     const step = A.eng.next(); Ls.step = step;
     if (!step) return finish(false);
     Ls.n++;
@@ -872,6 +992,7 @@
       const a = q.type === 'order' ? picked.map(i => q.items[i]) : q.type === 'sort' ? q.items.map((x, i) => placed[i]) : ans;
       const r = A.eng.record(step, a, { hint });
       persist(false);
+      if (A.eng.s && A.eng.s.simulado) { sfx('tap'); return nextStep(); }      // simulado: sem resposta na hora, como numa prova
       if (r.ok === false) return wrongScreen(step, q, a, chip);
       app().querySelectorAll('#ans button, #ans input, #ans textarea').forEach(x => x.disabled = true);
       if (q.type === 'mc') app().querySelectorAll('[data-i]').forEach(b => { if (+b.dataset.i === (q.answer || 0)) b.classList.add('ring-2', 'ring-primary-container', 'bg-primary-container/10'); });
@@ -1076,6 +1197,7 @@
     if (rec && rec.state === 'recording') try { rec.stop(); } catch (x) {}
     stopSpeak();
     const r = persist(true); const S = e.s; e.s = null; Ls = null; window.onresize = null;
+    if (S.simulado && !partial) return simResult(S, r);
     if (partial || !S.items.length && !S.pagesSec.length) return kidHome();
     const B = QKEngine.BADGES, p = e.prog;
     const s3 = r.stars >= 4 ? 3 : r.stars >= 3 ? 2 : 1;

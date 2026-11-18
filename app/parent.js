@@ -44,7 +44,7 @@
     const others = A().kids.filter(k => k.id !== kid.id);
     return `<div class="bg-surface-container-low rounded-xl p-3 flex items-center justify-between gap-3">
       <div class="flex items-center gap-3 min-w-0"><div class="w-12 h-12 rounded-full bg-primary-fixed flex items-center justify-center text-[26px] shadow-sm shrink-0">${esc(kid.avatar)}</div>
-        <div class="min-w-0"><span class="text-headline-md text-on-surface truncate block">${esc(kid.apelido)}</span><p class="text-body-sm text-on-surface-variant truncate">${[kid.serie, kid.idade ? kid.idade + ' ' + tx('anos', 'yrs') : '', kid.minutos + ' min/' + tx('dia', 'day')].filter(Boolean).join(' • ')}</p></div></div>
+        <div class="min-w-0"><span class="text-headline-md text-on-surface truncate block">${esc(kid.apelido)}</span><p class="text-body-sm text-on-surface-variant leading-snug">${[kid.serie, kid.idade ? kid.idade + ' ' + tx('anos', 'yrs') : '', kid.minutos + ' min/' + tx('dia', 'day')].filter(Boolean).join(' • ')}</p></div></div>
       ${others.length ? `<div class="flex gap-1.5">${others.map(k => `<button data-kid="${k.id}" class="w-10 h-10 rounded-full bg-surface-container-lowest shadow-sm text-[22px]" title="${esc(k.apelido)}">${esc(k.avatar)}</button>`).join('')}</div>` : ''}</div>`;
   }
   const wireKidSwitch = () => app().querySelectorAll('[data-kid]').forEach(b => b.onclick = () => { kidSel = b.dataset.kid; render(); });
@@ -56,66 +56,150 @@
   }
 
   /* ================= resumo ================= */
+  let periodo = 7, maisGraf = false;
+  const DISC = () => tx('Isto é uma estimativa, calculada só com as perguntas que o app criou a partir do material que vocês enviaram. Não é garantia de nota na prova da escola, que pode cobrar outros conteúdos e formatos.', 'This is an estimate, based only on the questions the app created from the material you sent. It does not guarantee a school grade; real tests may cover other content and formats.');
+  const fmtN1 = n => n === null || n === undefined ? '—' : (Math.round(n * 10) / 10).toFixed(1).replace('.', pt() ? ',' : '.');
+  // métricas de um período [ini, fim]
+  function metr(p, ts, ini, fim, goal, steps) {
+    const dias = p.dias || {}; let seg = 0, q = 0, ok = 0, pg = 0, studied = 0, goalDays = 0;
+    for (let d = ini; d <= fim; d = addDays(d, 1)) { const x = dias[d]; if (!x) continue; seg += x.seg || 0; q += x.q || 0; ok += x.ok || 0; pg += x.pg || 0; if (x.seg) studied++; if ((x.seg || 0) >= goal * 60 || ((x.q || 0) + (x.pg || 0)) >= steps) goalDays++; }
+    const words = Object.values(p.wordbank || {}).filter(x => x.added >= ini && x.added <= fim).length;
+    const tt = ts.filter(t => String(t.iniciada_em).slice(0, 10) >= ini && String(t.iniciada_em).slice(0, 10) <= fim);
+    const recs = tt.flatMap(x => (x.leitura && x.leitura.recordings) || []).filter(r => r.rating);
+    const sims = tt.filter(t => t.tipo === 'simulado' && t.leitura && t.leitura.simulado);
+    return { min: Math.round(seg / 60), q, ok, acc: q ? Math.round(100 * ok / q) : null, pg, studied, goalDays, words, read: recs.length ? recs.reduce((a, r) => a + r.rating, 0) / recs.length : null, sims: sims.length ? sims.reduce((a, t) => a + t.leitura.simulado.nota, 0) / sims.length : null };
+  }
   async function resumo() {
     const kid = A().kids.find(k => k.id === kidSel); if (!kid) return newChild(true);
-    const since = addDays(today(), -14);
-    const [pr, ts] = await Promise.all([DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'main' } }), DB.sel('tentativas', { eq: { crianca_id: kid.id }, gte: { iniciada_em: since }, order: 'iniciada_em.desc', limit: 60 })]);
-    const p = (pr[0] && pr[0].dados) || {}; const dias = p.dias || {}; const goal = kid.minutos || 20;
-    const wk = []; for (let i = 6; i >= 0; i--) wk.push(addDays(today(), -i));
-    const plan = wk.filter(d => (kid.dias || [1, 2, 3, 4, 5]).includes(new Date(d + 'T12:00').getDay()));
-    const studied = wk.filter(d => ((dias[d] || {}).seg || 0) >= goal * 60);
-    const newWords = Object.values(p.wordbank || {}).filter(x => x.added >= addDays(today(), -6)).length;
-    const t7 = ts.filter(x => x.iniciada_em >= addDays(today(), -6));
-    const recs = t7.flatMap(x => (x.leitura && x.leitura.recordings) || []); const rated = recs.filter(r => r.rating);
-    const pages = t7.reduce((s, x) => s + ((x.leitura && x.leitura.pages) || []).length, 0);
-    const items = t7.flatMap(x => x.itens || []).filter(i => i.correct !== null && i.correct !== undefined && i.station !== 'palavras');
-    const firsts = items.filter(i => !['similar', 'review', 'wordrev', 'extra'].includes(i.source));
-    const acc = firsts.length ? Math.round(100 * firsts.filter(i => i.correct).length / firsts.length) : null;
-    const skills = Object.entries(p.skills || {}).filter(([, v]) => v.right + v.wrong >= 3).map(([s, v]) => [s, Math.round(100 * v.right / (v.right + v.wrong)), v.right + v.wrong]).sort((a, b) => a[1] - b[1]);
-    const weak = skills[0];
-    const alerts = [];
-    wk.forEach(d => { const x = dias[d]; if (x && x.seg >= 600 && (x.q || 0) < 4) alerts.push(['warning', `${new Date(d + 'T12:00').toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { weekday: 'long' })}: ${Math.round(x.seg / 60)} min ${tx('e só', 'and only')} ${x.q || 0} ${tx('perguntas', 'questions')}`]); });
-    const pend = ts.reduce((s, x) => s + (x.pendentes || 0), 0) + recs.filter(r => !r.rating).length;
-    if (pend) alerts.push(['rate_review', `${pend} ${pend === 1 ? tx('item esperando sua correção', 'item waiting for your review') : tx('itens esperando sua correção', 'items waiting for your review')}`, 'corrigir']);
-    const mins = wk.map(d => Math.round(((dias[d] || {}).seg || 0) / 60)); const maxM = Math.max(goal, ...mins, 1);
-    const avg = Math.round(mins.reduce((a, b) => a + b, 0) / 7);
-    const wkd = pt() ? ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const kpi = (icon, iconCls, tag, tagCls, big, small, bar) => `<div class="${card} flex flex-col justify-between gap-2"><div class="flex items-center justify-between"><span class="w-9 h-9 rounded-full ${iconCls} flex items-center justify-center">${I(icon, 'text-[20px]', 1)}</span>${tag ? `<span class="text-label-sm ${tagCls} px-2 py-0.5 rounded-full">${tag}</span>` : ''}</div>
-      <div><span class="text-headline-xl-mobile text-on-surface">${big}</span><p class="text-body-sm text-on-surface-variant">${small}</p></div>${bar != null ? `<div class="w-full bg-surface-container-high rounded-full h-2 overflow-hidden"><div class="bg-primary-container h-full rounded-full" style="width:${bar}%"></div></div>` : ''}</div>`;
+    const N = periodo, fim = today(), ini = addDays(fim, -(N - 1)), pfim = addDays(ini, -1), pini = addDays(pfim, -(N - 1));
+    const [pr, ts, lics, simR] = await Promise.all([DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'main' } }), DB.sel('tentativas', { eq: { crianca_id: kid.id }, gte: { iniciada_em: addDays(today(), -Math.max(2 * N, 60)) }, order: 'iniciada_em.desc', limit: 500 }), DB.sel('licoes', { eq: { crianca_id: kid.id }, order: 'criado_em.desc', limit: 60 }).catch(() => []), DB.sel('progresso', { eq: { crianca_id: kid.id, chave: 'sim' } }).catch(() => [])]);
+    const p = (pr[0] && pr[0].dados) || {}; const dias = p.dias || {}; const goal = kid.minutos || 15, steps = Math.min(40, Math.round(goal * 0.6 + 4));
+    const plan = []; for (let d = ini; d <= fim; d = addDays(d, 1)) if ((kid.dias || [1, 2, 3, 4, 5]).includes(new Date(d + 'T12:00').getDay())) plan.push(d);
+    const M = metr(p, ts, ini, fim, goal, steps), Pv = metr(p, ts, pini, pfim, goal, steps);
+    const E = Object.create(QKEngine.prototype); E.prog = Object.assign({ dias: {}, sims: [] }, p); E.Q = {}; E.child = kid;
+    const est = E.estimate(Math.max(14, N)), estPrev = E.estimate(Math.max(14, N), N);
+    const sims = ts.filter(t => t.tipo === 'simulado' && t.leitura && t.leitura.simulado).slice(0, 10);
+    const pronta = sims.length >= 2 && sims[0].leitura.simulado.nota >= 7 && sims[1].leitura.simulado.nota >= 7;
+    const ph = A().wordPhases(p);
+    const pend = ts.reduce((s2, x) => s2 + (x.pendentes || 0), 0) + ts.flatMap(x => (x.leitura && x.leitura.recordings) || []).filter(r => !r.rating && !r.apagada).length;
+    const skills = Object.entries(p.skills || {}).filter(([, v]) => v.right + v.wrong >= 3).map(([s2, v]) => [s2, Math.round(100 * v.right / (v.right + v.wrong)), v.right + v.wrong]).sort((a, b) => a[1] - b[1]);
+    const weak = skills[0], strong = skills.slice().sort((a, b) => b[1] - a[1])[0];
+    const nomeP = { 7: tx('semana', 'week'), 30: tx('mês', 'month'), 90: tx('trimestre', 'quarter') }[N];
+    const arrow = (a, b2, inv) => a === null || b2 === null || a === b2 ? '' : (a > b2) !== !!inv ? `<span class="text-primary">▲</span>` : `<span class="text-error">▼</span>`;
+    const delta = (a, b2, suf) => a === null || b2 === null ? '' : `${a - b2 >= 0 ? '+' : ''}${Math.round((a - b2) * 10) / 10}${suf || ''}`;
+    // texto do relatório
+    const nm = kid.apelido;
+    const texto = [
+      tx(`📊 Relatório de ${nm} — ${nomeP} (${fmtD(ini)} a ${fmtD(fim)})`, `📊 ${nm}'s report — ${nomeP} (${fmtD(ini)} to ${fmtD(fim)})`),
+      tx(`• Estudou ${M.studied} ${M.studied === 1 ? 'dia' : 'dias'} (${M.goalDays} com a meta completa), ${M.min} min no total${Pv.studied || Pv.min ? ` — antes: ${Pv.studied} dias, ${Pv.min} min` : ''}.`, `• Studied ${M.studied} days (${M.goalDays} with the goal done), ${M.min} min in total${Pv.studied || Pv.min ? ` — before: ${Pv.studied} days, ${Pv.min} min` : ''}.`),
+      M.acc !== null ? tx(`• Acertou ${M.acc}% das ${M.q} atividades${Pv.acc !== null ? ` (antes ${Pv.acc}%)` : ''}.`, `• Got ${M.acc}% of ${M.q} activities right${Pv.acc !== null ? ` (before ${Pv.acc}%)` : ''}.`) : '',
+      tx(`• Palavras novas: ${M.words}. No total: ${ph.dominadas.length} dominadas, ${ph.desenvolvendo.length} em treino e ${ph.comecando.length} começando.`, `• New words: ${M.words}. Overall: ${ph.dominadas.length} mastered, ${ph.desenvolvendo.length} practicing, ${ph.comecando.length} starting.`),
+      M.read !== null ? tx(`• Leitura em voz alta: nota média ${fmtN1(M.read)} de 5.`, `• Reading aloud: average ${fmtN1(M.read)} out of 5.`) : '',
+      strong ? tx(`• Indo bem em: ${A().skillInfo(strong[0]).name} (${strong[1]}%).`, `• Doing well in: ${A().skillInfo(strong[0]).name} (${strong[1]}%).`) : '',
+      weak && (!strong || weak[0] !== strong[0]) ? tx(`• Para reforçar: ${A().skillInfo(weak[0]).name} (${weak[1]}%).`, `• To reinforce: ${A().skillInfo(weak[0]).name} (${weak[1]}%).`) : '',
+      est !== null ? tx(`• Nota estimada: ${fmtN1(est)}/10${estPrev !== null ? ` (antes ${fmtN1(estPrev)})` : ''}. É uma estimativa, não garantia.`, `• Estimated grade: ${fmtN1(est)}/10${estPrev !== null ? ` (before ${fmtN1(estPrev)})` : ''}. An estimate, not a guarantee.`) : '',
+      M.studied < plan.length ? tx(`💡 Dica: o que mais ajuda é a constância — um pouco todos os dias combinados.`, `💡 Tip: consistency helps most — a little on every planned day.`) : tx(`🎉 Estudou em todos os dias combinados. Parabéns!`, `🎉 Studied on every planned day. Congrats!`)
+    ].filter(Boolean).join('\n');
+    // gráficos: palavras acumuladas e acertos por semana (12 semanas)
+    const W = []; for (let w = 11; w >= 0; w--) { const we = addDays(today(), -7 * w), ws = addDays(we, -6); const m2 = metr(p, [], ws, we, goal, steps); W.push({ ws, acc: m2.acc, words: Object.values(p.wordbank || {}).filter(x => x.added <= we).length, min: m2.min }); }
+    const line = (vals, maxV, color) => { const pts = vals.map((v, i) => v === null ? null : [12 + i * 25, 92 - (v / Math.max(1, maxV)) * 80]).filter(Boolean); return pts.length > 1 ? `<polyline fill="none" stroke="${color}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" points="${pts.map(x => x.join(',')).join(' ')}"/>${pts.map(x => `<circle cx="${x[0]}" cy="${x[1]}" r="3.5" fill="${color}"/>`).join('')}` : ''; };
+    const maxWords = Math.max(5, ...W.map(x => x.words));
+    const wl = ['', ...W.map(x => fmtD(x.ws))].slice(1);
+    const info = (id, txt) => `<button data-info="${id}" class="w-6 h-6 rounded-full bg-surface-container text-on-surface-variant text-[13px] font-black inline-flex items-center justify-center shrink-0" aria-label="info">i</button><p data-infotxt="${id}" class="hidden col-span-full text-body-sm text-on-surface-variant bg-surface-container-low rounded-xl p-2.5 mt-1">${txt}</p>`;
+    const kpi = (id, icon, cls, big, small, cmp, tip) => `<div class="${card} space-y-1.5"><div class="flex items-center justify-between gap-2"><span class="w-9 h-9 rounded-full ${cls} flex items-center justify-center">${I(icon, 'text-[20px]', 1)}</span>${info(id, tip)}</div><div class="flex items-baseline gap-2 flex-wrap"><span class="text-headline-xl-mobile text-on-surface">${big}</span><span class="text-label-sm">${cmp || ''}</span></div><p class="text-body-sm text-on-surface-variant">${small}</p></div>`;
     const tl = A().trialLeft();
-    shell(`<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-      <div class="lg:col-span-3 space-y-3">
-        <section class="${card} space-y-3">
-          <div class="flex items-center justify-between"><div><p class="text-label-sm text-outline flex items-center gap-1 uppercase tracking-wide">${I('verified_user', 'text-[14px] text-primary')} ${tx('Área dos pais', 'Parents area')}</p>
-            <h1 class="text-headline-lg-mobile md:text-headline-lg text-on-surface mt-0.5">${tx('Olá, família', 'Hi, family')} 👋</h1></div>
-            <div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary">${I('shield_person', 'text-[24px]')}</div></div>
-          ${kidSwitcher(kid)}</section>
-        ${tl !== null ? `<button id="toplan" class="w-full text-left bg-secondary-fixed text-on-secondary-fixed rounded-2xl p-3.5 flex items-center gap-3">${I('hourglass_top', 'text-[22px]')}<span class="text-label-md flex-1">${tx(`Teste grátis: faltam ${tl} dias.`, `Free trial: ${tl} days left.`)}</span><span class="text-label-md underline">${tx('Ver planos', 'See plans')}</span></button>` : ''}
-        ${alerts.map(([ic, msg, go]) => `<${go ? `button data-go="${go}"` : 'div'} class="w-full text-left bg-secondary-fixed/60 text-on-secondary-fixed rounded-2xl p-3.5 flex items-center gap-3">${I(ic, 'text-[22px]')}<span class="text-label-md">${esc(msg)}</span></${go ? 'button' : 'div'}>`).join('')}
+    shell(`<div class="space-y-5 max-w-5xl">
+      <section class="${card} space-y-3">
+        <div class="flex items-center justify-between"><div><p class="text-label-sm text-outline flex items-center gap-1 uppercase tracking-wide">${I('verified_user', 'text-[14px] text-primary')} ${tx('Área dos pais', 'Parents area')}</p><h1 class="text-headline-lg-mobile md:text-headline-lg text-on-surface mt-0.5">${tx('Olá, família', 'Hi, family')} 👋</h1></div></div>
+        ${kidSwitcher(kid)}</section>
+      ${tl !== null ? `<button id="toplan" class="w-full text-left bg-secondary-fixed text-on-secondary-fixed rounded-2xl p-3.5 flex items-center gap-3">${I('hourglass_top', 'text-[22px]')}<span class="text-label-md flex-1">${tx(`Teste grátis: faltam ${tl} dias.`, `Free trial: ${tl} days left.`)}</span><span class="text-label-md underline">${tx('Ver planos', 'See plans')}</span></button>` : ''}
+      ${pend ? `<button data-go="corrigir" class="w-full text-left bg-secondary-fixed/60 text-on-secondary-fixed rounded-2xl p-3.5 flex items-center gap-3">${I('rate_review', 'text-[22px]')}<span class="text-label-md">${pend} ${pend === 1 ? tx('item esperando sua correção', 'item waiting for your review') : tx('itens esperando sua correção', 'items waiting for your review')}</span></button>` : ''}
+      <div class="flex items-center justify-between gap-2 flex-wrap"><h2 class="text-headline-md text-on-surface">${tx('Como está indo', 'How it is going')}</h2>${seg([['7', tx('Semana', 'Week')], ['30', tx('Mês', 'Month')], ['90', tx('Trimestre', 'Quarter')]], String(N), 'data-per')}</div>
+      <p class="text-body-sm text-on-surface-variant -mt-3">${tx(`Comparando ${fmtD(ini)}–${fmtD(fim)} com o período anterior (${fmtD(pini)}–${fmtD(pfim)}).`, `Comparing ${fmtD(ini)}–${fmtD(fim)} with the previous period (${fmtD(pini)}–${fmtD(pfim)}).`)}</p>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        ${kpi('d', 'calendar_month', 'bg-primary-fixed-dim/20 text-primary', `${M.studied}<span class="text-headline-md text-on-surface-variant">/${plan.length}</span>`, tx('Dias que estudou', 'Days studied'), `${arrow(M.studied, Pv.studied)} ${delta(M.studied, Pv.studied)}`, tx(`Dias com qualquer estudo, de ${plan.length} dias combinados. ${M.goalDays} tiveram a meta completa (${goal} min ou ${steps} atividades).`, `Days with any study, out of ${plan.length} planned. ${M.goalDays} hit the goal (${goal} min or ${steps} activities).`))}
+        ${kpi('a', 'target', 'bg-primary/10 text-primary', M.acc === null ? '—' : M.acc + '%', tx('Acertos', 'Accuracy'), `${arrow(M.acc, Pv.acc)} ${delta(M.acc, Pv.acc, ' pts')}`, tx('Porcentagem de atividades certas no período (perguntas, palavras e exercícios).', 'Share of activities answered correctly in the period.'))}
+        ${kpi('w', 'spellcheck', 'bg-secondary-container/40 text-on-secondary-container', M.words, tx('Palavras novas', 'New words'), `${arrow(M.words, Pv.words)} ${delta(M.words, Pv.words)}`, tx('Palavras que apareceram pela primeira vez no período. Elas viram "dominadas" quando a criança acerta em dias diferentes.', 'Words met for the first time. They become "mastered" after correct answers on different days.'))}
+        ${kpi('n', 'grade', 'bg-tertiary-fixed/40 text-tertiary', fmtN1(est), tx('Nota estimada', 'Estimated grade'), `${arrow(est, estPrev)} ${delta(est, estPrev)}`, DISC())}
       </div>
-      <section class="lg:col-span-2 space-y-2">
-        <div class="flex items-center justify-between px-1"><h2 class="text-headline-md text-on-surface">${tx('Resumo da semana', 'This week')}</h2><span class="text-label-sm text-outline">${tx('Últimos 7 dias', 'Last 7 days')}</span></div>
-        <div class="grid grid-cols-2 gap-3">
-          ${kpi('calendar_month', 'bg-primary-fixed-dim/20 text-primary', `${tx('meta', 'goal')} ${goal} min`, 'text-primary bg-primary/10', `${studied.length} <span class="text-headline-md text-on-surface-variant">/ ${plan.length}</span>`, tx('Dias de estudo', 'Study days'), plan.length ? Math.round(100 * Math.min(studied.length, plan.length) / plan.length) : 0)}
-          ${kpi('spellcheck', 'bg-secondary-container/40 text-on-secondary-container', `${Object.keys(p.wordbank || {}).length} ${tx('no total', 'total')}`, 'text-secondary bg-secondary-container/30', newWords, tx('Palavras novas', 'New words'))}
-          ${kpi('record_voice_over', 'bg-tertiary-fixed/40 text-tertiary', rated.length ? `${rated.length} ${tx('avaliadas', 'rated')}` : '', 'text-tertiary bg-tertiary/10', rated.length ? '⭐ ' + (rated.reduce((s, r) => s + r.rating, 0) / rated.length).toFixed(1).replace('.', pt() ? ',' : '.') : pages, rated.length ? tx('Nota da leitura', 'Reading score') : tx('Páginas lidas', 'Pages read'))}
-          ${kpi('target', 'bg-primary/10 text-primary', acc === null ? '' : acc >= 85 ? tx('Excelente 🎯', 'Excellent 🎯') : acc >= 65 ? tx('Bom', 'Good') : tx('Atenção', 'Watch'), 'text-primary bg-primary/10', acc === null ? '—' : acc + '%', weak ? tx('Reforçar: ', 'Needs work: ') + esc(A().skillInfo(weak[0]).name) : tx('Acertos na 1ª tentativa', 'Right on 1st try'))}
-        </div></section>
-      <section class="${card} space-y-4">
-        <div class="flex items-start justify-between gap-2"><div><h2 class="text-headline-md text-on-surface">${tx('Tempo diário', 'Daily time')}</h2><p class="text-body-sm text-on-surface-variant">${tx('Média de', 'Average')} ${avg} min/${tx('dia', 'day')}</p></div>
-          <span class="flex items-center gap-1.5 bg-surface-container px-2.5 py-1 rounded-full text-label-sm text-on-surface"><span class="w-2.5 h-2.5 rounded-full bg-primary-container"></span>${tx('Meta', 'Goal')}: ${goal} min</span></div>
-        <div class="grid grid-cols-7 gap-2 items-end h-36">${wk.map((d, i) => `<div class="flex flex-col items-center gap-1.5 h-full justify-end"><span class="text-label-sm ${mins[i] >= goal ? 'text-primary' : 'text-on-surface-variant'}">${mins[i]}m</span><div class="w-full max-w-[28px] rounded-t-lg ${mins[i] >= goal ? 'bg-primary-container' : 'bg-tertiary-container/80'}" style="height:${Math.max(3, Math.round(100 * mins[i] / maxM))}%"></div><span class="text-label-sm text-outline">${wkd[new Date(d + 'T12:00').getDay()]}</span></div>`).join('')}</div>
+      <section class="${card} space-y-3"><div class="flex items-center justify-between gap-2 flex-wrap"><h2 class="text-headline-md text-on-surface">📝 ${tx('Resumo para compartilhar', 'Shareable summary')}</h2></div>
+        <pre id="rtxt" class="whitespace-pre-wrap font-sans text-body-md text-on-surface bg-surface-container-low rounded-xl p-3">${esc(texto)}</pre>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2"><button id="rcopy" class="h-11 rounded-xl bg-primary-container text-on-primary text-label-md">📋 ${tx('Copiar', 'Copy')}</button><button id="rshare" class="h-11 rounded-xl bg-surface-container text-on-surface text-label-md">💬 ${tx('Compartilhar', 'Share')}</button><button id="rmail" class="h-11 rounded-xl bg-surface-container text-on-surface text-label-md">✉️ E-mail</button><button id="rpdf" class="h-11 rounded-xl bg-surface-container text-on-surface text-label-md">📄 PDF</button></div></section>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <section class="${card} space-y-3"><div class="flex items-center justify-between gap-2"><h2 class="text-headline-md text-on-surface">🔤 ${tx('Palavras', 'Words')}</h2>${info('pw', tx('🌱 Começando: viu há pouco. 🌿 Em treino: já acertou algumas vezes. 🌳 Dominadas: acertou em vários dias diferentes (repetição espaçada).', '🌱 Starting: just met. 🌿 Practicing: right a few times. 🌳 Mastered: right on several different days (spaced repetition).'))}</div>
+          <div class="grid grid-cols-3 gap-2">${[['comecando', '🌱', tx('Começando', 'Starting')], ['desenvolvendo', '🌿', tx('Em treino', 'Practicing')], ['dominadas', '🌳', tx('Dominadas', 'Mastered')]].map(([k, em, n]) => `<div class="rounded-xl bg-surface-container-low p-3 text-center"><div class="text-[22px]">${em}</div><div class="text-headline-md text-on-surface">${ph[k].length}</div><div class="text-label-sm text-on-surface-variant">${n}</div></div>`).join('')}</div>
+          ${[['dominadas', '🌳'], ['desenvolvendo', '🌿'], ['comecando', '🌱']].map(([k, em]) => ph[k].length ? `<p class="text-body-sm text-on-surface"><b>${em}</b> ${ph[k].slice(0, 14).map(([w]) => esc(w)).join(', ')}${ph[k].length > 14 ? '…' : ''}</p>` : '').join('')}
+          <svg viewBox="0 0 300 100" class="w-full h-28"><text x="2" y="10" font-size="9" fill="rgb(var(--c-on-surface-variant))">${tx('palavras no total (12 semanas)', 'total words (12 weeks)')}</text>${line(W.map(x => x.words), maxWords, 'rgb(var(--c-secondary-container))')}</svg></section>
+        <section class="${card} space-y-3"><div class="flex items-center justify-between gap-2"><h2 class="text-headline-md text-on-surface">🎯 ${tx('Acertos por semana', 'Weekly accuracy')}</h2>${info('ac', tx('Cada ponto é uma semana. A linha subindo mostra que ela está aprendendo.', 'Each point is a week. A rising line shows learning.'))}</div>
+          <svg viewBox="0 0 300 100" class="w-full h-32"><line x1="0" y1="12" x2="300" y2="12" stroke="rgb(var(--c-outline-variant))" stroke-dasharray="4 4"/><text x="2" y="9" font-size="8" fill="rgb(var(--c-on-surface-variant))">100%</text>${line(W.map(x => x.acc), 100, 'rgb(var(--c-primary-container))')}</svg>
+          <p class="text-label-sm text-on-surface-variant">${wl[0]} → ${wl[wl.length - 1]}</p></section>
+      </div>
+      <section class="${card} space-y-3"><div class="flex items-center justify-between gap-2 flex-wrap"><h2 class="text-headline-md text-on-surface">📝 ${tx('Nota estimada e simulado', 'Estimated grade & practice test')}</h2>${pronta ? `<span class="px-3 py-1 rounded-full bg-primary-container text-on-primary text-label-md">${tx('Pronta para a prova ✅', 'Ready for the test ✅')}</span>` : ''}</div>
+        <div class="flex items-center gap-4"><div class="w-20 h-20 rounded-2xl bg-tertiary-fixed text-on-tertiary-fixed flex flex-col items-center justify-center shrink-0"><span class="text-headline-lg-mobile font-black leading-none">${fmtN1(est)}</span><span class="text-label-sm">/10</span></div><p class="text-body-sm text-on-surface-variant">ℹ️ ${DISC()}${pronta ? ' ' + tx('"Pronta para a prova" aparece quando ela tira 7 ou mais em dois simulados seguidos.', '"Ready" shows after 7+ on two practice tests in a row.') : ''}</p></div>
+        ${est !== null && est < 7 ? `<p class="text-body-sm text-on-surface bg-secondary-fixed/50 rounded-xl p-3">💡 ${tx(`Sugestão: com a nota abaixo de 7, o ideal é estudar todos os dias até a prova. Suba para ${Math.min(60, (kid.minutos || 15) + 5)} min por dia e dê prioridade à matéria da prova em Material.`, `Tip: with a grade under 7, study every day until the test. Go up to ${Math.min(60, (kid.minutos || 15) + 5)} min a day and prioritize the test subject in Material.`)}</p>` : ''}
+        <div class="bg-surface-container-low rounded-2xl p-3 space-y-2"><b class="text-label-lg text-on-surface">${tx('Preparar um simulado para a criança', 'Set up a practice test for your child')}</b>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <label class="text-label-sm text-on-surface-variant">${tx('Perguntas', 'Questions')}<select id="sn" class="${inputCls} !h-11 mt-1">${[5, 10, 15, 20].map(n => `<option ${n === 10 ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
+            <label class="text-label-sm text-on-surface-variant">${tx('Tempo', 'Time')}<select id="st" class="${inputCls} !h-11 mt-1"><option value="0">${tx('Sem limite', 'No limit')}</option>${[10, 15, 20, 30, 45].map(n => `<option value="${n}">${n} min</option>`).join('')}</select></label>
+            <label class="text-label-sm text-on-surface-variant">${tx('Matéria', 'Subject')}<select id="sl" class="${inputCls} !h-11 mt-1"><option value="">${tx('Todas', 'All')}</option>${lics.filter(l => !l.pausada).map(l => `<option value="${esc(l.id)}">${esc((l.titulo || '').slice(0, 40))}</option>`).join('')}</select></label></div>
+          ${simR[0] && simR[0].dados && !simR[0].dados.feito ? `<p class="text-body-sm text-on-surface">⏳ ${tx('Já tem um simulado esperando a criança fazer', 'A practice test is waiting for your child')} (${simR[0].dados.n} ${tx('perguntas', 'questions')}).</p>` : ''}
+          <button id="simsave" class="btn3d w-full h-12 rounded-xl bg-primary-container text-on-primary text-label-lg">📝 ${tx('Deixar o simulado para a criança fazer', 'Leave the practice test for your child')}</button>
+          <p class="text-body-sm text-on-surface-variant">${tx('Aparece na tela Hoje dela. Como numa prova, ela só vê a nota no final.', 'It shows on her Today screen. Like a real test, she only sees the grade at the end.')}</p></div>
+        ${sims.length ? `<div><b class="text-label-lg text-on-surface">${tx('Simulados feitos', 'Practice tests taken')}</b><div class="divide-y divide-surface-container-high mt-1">${sims.map((t, i) => { const sm = t.leitura.simulado, prev = sims[i + 1]; return `<button data-sim="${i}" class="w-full text-left py-2.5 flex items-center gap-3"><span class="flex-1 text-body-md text-on-surface">${fmtD(String(t.iniciada_em).slice(0, 10))} · ${t.total} ${tx('perguntas', 'questions')} · ⏱️ ${Math.max(1, Math.round((t.duracao_seg || 0) / 60))} min</span><b class="text-label-lg ${sm.nota >= 7 ? 'text-primary' : 'text-secondary'}">${fmtN1(sm.nota)}</b>${prev ? arrow(sm.nota, prev.leitura.simulado.nota) : ''}</button>`; }).join('')}</div></div>` : ''}
       </section>
-      <section class="lg:col-span-2 space-y-2"><div class="flex items-center justify-between px-1"><h2 class="text-headline-md text-on-surface">${tx('Domínio por assunto', 'Mastery by topic')}</h2></div>
-        ${skills.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${skills.slice().sort((a, b) => b[2] - a[2]).slice(0, 8).map(([s, pc, n]) => { const inf = A().skillInfo(s); return `<div class="${card} space-y-2"><div class="flex items-center justify-between gap-2"><div class="flex items-center gap-2.5 min-w-0"><div class="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">${I(inf.icon, 'text-[22px]')}</div><div class="min-w-0"><b class="text-label-lg text-on-surface truncate block">${esc(inf.name)}</b><span class="text-body-sm text-on-surface-variant">${n} ${tx('respostas', 'answers')}</span></div></div><span class="text-label-lg ${pc >= 80 ? 'text-primary' : pc >= 60 ? 'text-secondary' : 'text-error'}">${pc}%</span></div>
-          <div class="w-full bg-surface-container-high rounded-full h-2 overflow-hidden"><div class="h-full rounded-full ${pc >= 80 ? 'bg-primary-container' : pc >= 60 ? 'bg-secondary-container' : 'bg-error'}" style="width:${pc}%"></div></div></div>`; }).join('')}</div>`
-        : `<p class="${card} text-body-md text-on-surface-variant">${tx('Aparece depois das primeiras lições.', 'Shows up after the first lessons.')}</p>`}</section>
-      <section class="${card}"><h2 class="text-headline-md text-on-surface mb-3">${tx('Últimas sessões', 'Recent sessions')}</h2><div class="divide-y divide-surface-container-high">
-        ${ts.slice(0, 6).map(x => `<div class="py-2.5 flex items-center gap-3"><div class="flex-1 min-w-0"><b class="text-label-md text-on-surface truncate block">${esc((x.leitura && x.leitura.titulo) || (x.tipo === 'pratica' ? tx('Prática', 'Practice') : x.licao_id))}</b><span class="text-body-sm text-on-surface-variant">${new Date(x.iniciada_em).toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' })} · ${Math.round((x.duracao_seg || 0) / 60)} min · ${x.acertos || 0}/${x.total || 0}</span></div><span class="text-label-sm">${'⭐'.repeat(Math.min(3, Math.ceil((x.estrelas || 0) * 3 / 5)))}</span></div>`).join('') || `<p class="text-body-md text-on-surface-variant py-2">${tx('Nenhuma ainda.', 'None yet.')}</p>`}</div></section>
+      <button id="mais" class="w-full h-12 rounded-2xl bg-surface-container text-on-surface text-label-lg">${maisGraf ? tx('Esconder gráficos extras ▲', 'Hide extra charts ▲') : tx('📈 Ver mais gráficos', '📈 See more charts')}</button>
+      ${maisGraf ? (() => { const D = []; for (let d = ini; d <= fim; d = addDays(d, 1)) D.push([d, Math.round(((dias[d] || {}).seg || 0) / 60)]); const B = N > 31 ? W.slice(-13).map(x => [x.ws, x.min, true]) : D; const mx = Math.max(goal * (N > 31 ? 5 : 1), ...B.map(x => x[1]), 1);
+        return `<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <section class="${card} space-y-3"><div class="flex items-center justify-between"><h2 class="text-headline-md text-on-surface">⏱️ ${N > 31 ? tx('Minutos por semana', 'Minutes per week') : tx('Minutos por dia', 'Minutes per day')}</h2>${info('tm', tx(`Barra verde = meta do dia (${goal} min) cumprida.`, `Green bar = daily goal (${goal} min) met.`))}</div>
+          <div class="flex items-end gap-1 h-36">${B.map(([d, m, wkk]) => `<div class="flex-1 flex flex-col items-center justify-end h-full" title="${d}: ${m} min"><div class="w-full rounded-t ${m >= goal * (wkk ? 5 : 1) ? 'bg-primary-container' : 'bg-tertiary-container/70'}" style="height:${Math.max(2, Math.round(100 * m / mx))}%"></div></div>`).join('')}</div>
+          <p class="text-label-sm text-on-surface-variant">${fmtD(B[0][0])} → ${fmtD(B[B.length - 1][0])} · ${tx('média', 'avg')} ${Math.round(M.min / Math.max(1, M.studied))} min ${tx('por dia de estudo', 'per study day')}</p></section>
+        <section class="${card} space-y-2"><div class="flex items-center justify-between"><h2 class="text-headline-md text-on-surface">${tx('Domínio por assunto', 'Mastery by topic')}</h2>${info('sk', tx('Porcentagem de acertos em cada assunto desde o começo.', 'Accuracy per topic since the start.'))}</div>
+          ${skills.length ? skills.slice().sort((a, b) => b[2] - a[2]).slice(0, 10).map(([s2, pc, n]) => `<div><div class="flex justify-between text-label-md text-on-surface"><span class="truncate">${esc(A().skillInfo(s2).name)} <span class="text-on-surface-variant font-normal">(${n})</span></span><span class="${pc >= 80 ? 'text-primary' : pc >= 60 ? 'text-secondary' : 'text-error'}">${pc}%</span></div><div class="h-2 bg-surface-container-high rounded-full overflow-hidden mt-1"><div class="h-full rounded-full ${pc >= 80 ? 'bg-primary-container' : pc >= 60 ? 'bg-secondary-container' : 'bg-error'}" style="width:${pc}%"></div></div></div>`).join('') : `<p class="text-body-sm text-on-surface-variant">${tx('Aparece depois das primeiras lições.', 'Shows after the first lessons.')}</p>`}</section>
+        <section class="${card}"><h2 class="text-headline-md text-on-surface mb-2">${tx('Sessões do período', 'Sessions in period')}</h2><div class="divide-y divide-surface-container-high max-h-80 overflow-y-auto">
+          ${ts.filter(x => String(x.iniciada_em).slice(0, 10) >= ini).slice(0, 40).map(x => `<div class="py-2.5 flex items-center gap-3"><div class="flex-1 min-w-0"><b class="text-label-md text-on-surface truncate block">${esc(x.tipo === 'simulado' ? '📝 ' + tx('Simulado', 'Practice test') : (x.leitura && x.leitura.titulo) || (x.tipo === 'pratica' ? tx('Prática extra', 'Extra practice') : tx('Lição do dia', 'Daily lesson')))}</b><span class="text-body-sm text-on-surface-variant">${fmtD(String(x.iniciada_em).slice(0, 10))} · ${Math.round((x.duracao_seg || 0) / 60)} min · ${x.acertos || 0}/${x.total || 0}</span></div></div>`).join('') || `<p class="text-body-md text-on-surface-variant py-2">${tx('Nenhuma.', 'None.')}</p>`}</div></section>
+        <section class="${card} space-y-2"><h2 class="text-headline-md text-on-surface">${tx('Comparação com o período anterior', 'Compared to the previous period')}</h2>
+          ${[[tx('Dias de estudo', 'Study days'), M.studied, Pv.studied], [tx('Minutos', 'Minutes'), M.min, Pv.min], [tx('Atividades', 'Activities'), M.q, Pv.q], [tx('Acertos (%)', 'Accuracy (%)'), M.acc, Pv.acc], [tx('Palavras novas', 'New words'), M.words, Pv.words], [tx('Páginas lidas', 'Pages read'), M.pg, Pv.pg]].map(([n, a, b2]) => `<div class="flex items-center justify-between text-body-md py-1 border-b border-surface-container-high last:border-0"><span class="text-on-surface">${n}</span><span class="text-on-surface-variant">${b2 ?? '—'} → <b class="text-on-surface">${a ?? '—'}</b> ${arrow(a, b2)}</span></div>`).join('')}</section>
+      </div>`; })() : ''}
     </div>`);
     wireKidSwitch();
     const tp = $('#toplan'); if (tp) tp.onclick = () => { tab = 'conta'; render(); };
     app().querySelectorAll('[data-go]').forEach(b => b.onclick = () => { tab = b.dataset.go; render(); });
+    app().querySelectorAll('[data-per]').forEach(b => b.onclick = () => { periodo = +b.dataset.per; render(); });
+    app().querySelectorAll('[data-info]').forEach(b => b.onclick = () => { const t2 = app().querySelector(`[data-infotxt="${b.dataset.info}"]`); if (t2) t2.classList.toggle('hidden'); });
+    $('#mais').onclick = () => { maisGraf = !maisGraf; render(); };
+    $('#rcopy').onclick = async () => { try { await navigator.clipboard.writeText(texto); toast('📋 ' + tx('Copiado!', 'Copied!')); } catch (e) { const r = document.createRange(); r.selectNodeContents($('#rtxt')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); toast(tx('Texto selecionado: toque em Copiar.', 'Text selected: tap Copy.')); } };
+    $('#rshare').onclick = async () => { if (navigator.share) { try { await navigator.share({ title: 'Quest Kids', text: texto }); } catch (e) {} } else window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank'); };
+    $('#rmail').onclick = () => { location.href = 'mailto:?subject=' + encodeURIComponent(tx(`Relatório Quest Kids — ${nm}`, `Quest Kids report — ${nm}`)) + '&body=' + encodeURIComponent(texto); };
+    $('#rpdf').onclick = () => pdfReport(kid, texto, { M, Pv, W, ph, est, sims, ini, fim, maxWords, line });
+    $('#simsave').onclick = async () => {
+      const cfg = { n: +$('#sn').value, tempo: +$('#st').value || 0, licoes: $('#sl').value ? [$('#sl').value] : null, criado: new Date().toISOString(), feito: false };
+      try { await DB.ins('progresso', { crianca_id: kid.id, chave: 'sim', dados: cfg, atualizado_em: new Date().toISOString() }, { upsert: true, onConflict: 'crianca_id,chave' }); toast('✅ ' + tx('Pronto! O simulado aparece na tela da criança.', "Done! The test shows on your child's screen."), 4000); render(); } catch (x) { toast(x.message); }
+    };
+    app().querySelectorAll('[data-sim]').forEach(b => b.onclick = () => {
+      const t2 = sims[+b.dataset.sim], wrong = (t2.itens || []).filter(i => i.correct === false);
+      const ov = document.createElement('div'); ov.className = 'fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center';
+      ov.innerHTML = `<div class="bg-surface w-full sm:max-w-lg max-h-[85vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 space-y-3"><div class="flex justify-between items-center"><h3 class="text-headline-md text-on-surface">📝 ${tx('Simulado', 'Practice test')} · ${fmtN1(t2.leitura.simulado.nota)}</h3><button data-x class="w-10 h-10 rounded-full bg-surface-container">✕</button></div>
+        <p class="text-body-md text-on-surface">${t2.acertos}/${t2.total} ${tx('certas', 'right')} · ⏱️ ${Math.max(1, Math.round((t2.duracao_seg || 0) / 60))} min${t2.leitura.simulado.tempo ? ' / ' + t2.leitura.simulado.tempo + ' min' : ''} · ${tx('média', 'avg')} ${Math.round((t2.duracao_seg || 0) / Math.max(1, t2.total))}s ${tx('por pergunta', 'per question')}</p>
+        ${wrong.length ? `<b class="text-label-lg text-on-surface">${tx('Errou', 'Missed')}</b>${wrong.map(i => `<div class="bg-surface-container-low rounded-xl p-3 text-body-sm"><span class="text-on-surface-variant">${tx('Resposta dela', 'Her answer')}:</span> <b class="text-error">${esc(i.answer)}</b><br><span class="text-on-surface-variant">${esc(A().skillInfo(i.skill || '').name)}</span></div>`).join('')}` : `<p class="text-body-md text-primary">${tx('Acertou tudo! 🎉', 'All right! 🎉')}</p>`}
+        <p class="text-body-sm text-on-surface-variant">ℹ️ ${DISC()}</p></div>`;
+      document.body.appendChild(ov); ov.onclick = e => { if (e.target === ov || e.target.closest('[data-x]')) ov.remove(); };
+    });
+  }
+  const fmtD = d => new Date(d + 'T12:00').toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' });
+  // relatório em PDF simples (abre a versão para imprimir / salvar em PDF)
+  function pdfReport(kid, texto, d) {
+    const w = window.open('', '_blank'); if (!w) return toast(tx('Libere os pop-ups para gerar o PDF.', 'Allow pop-ups to create the PDF.'));
+    const bar = (n, a, b2, suf) => `<tr><td>${n}</td><td>${b2 ?? '—'}${suf || ''}</td><td><b>${a ?? '—'}${suf || ''}</b></td></tr>`;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Quest Kids — ${esc(kid.apelido)}</title><style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#10302f;max-width:720px;margin:24px auto;padding:0 16px}h1{font-size:22px;margin:0}h2{font-size:16px;margin:22px 0 8px}.s{color:#566}pre{white-space:pre-wrap;font-family:inherit;background:#f1f7f7;padding:12px;border-radius:10px}table{width:100%;border-collapse:collapse}td{padding:6px;border-bottom:1px solid #dde}.g{display:grid;grid-template-columns:1fr 1fr;gap:14px}.c{border:1px solid #dde;border-radius:10px;padding:10px}.d{font-size:11px;color:#677;margin-top:24px}@media print{button{display:none}}</style></head><body>
+      <h1>🚀 Quest Kids — ${esc(kid.avatar)} ${esc(kid.apelido)}</h1><p class="s">${fmtD(d.ini)} – ${fmtD(d.fim)}</p>
+      <h2>${tx('Resumo', 'Summary')}</h2><pre>${esc(texto)}</pre>
+      <h2>${tx('Comparação', 'Comparison')}</h2><table><tr><td></td><td class="s">${tx('Período anterior', 'Previous')}</td><td class="s">${tx('Este período', 'This period')}</td></tr>${bar(tx('Dias de estudo', 'Study days'), d.M.studied, d.Pv.studied)}${bar(tx('Minutos', 'Minutes'), d.M.min, d.Pv.min)}${bar(tx('Atividades', 'Activities'), d.M.q, d.Pv.q)}${bar(tx('Acertos', 'Accuracy'), d.M.acc, d.Pv.acc, '%')}${bar(tx('Palavras novas', 'New words'), d.M.words, d.Pv.words)}</table>
+      <div class="g"><div class="c"><h2>${tx('Palavras no total', 'Total words')}</h2><svg viewBox="0 0 300 100" width="100%">${d.line(d.W.map(x => x.words), d.maxWords, '#e8a400')}</svg><p class="s">${tx('Cada ponto é uma semana (12 semanas).', 'Each point is a week (12 weeks).')}</p></div>
+        <div class="c"><h2>${tx('Acertos por semana', 'Weekly accuracy')}</h2><svg viewBox="0 0 300 100" width="100%">${d.line(d.W.map(x => x.acc), 100, '#14a3a3')}</svg><p class="s">${tx('Linha subindo = aprendendo.', 'Rising line = learning.')}</p></div></div>
+      <h2>${tx('Palavras', 'Words')}</h2><p>🌳 ${d.ph.dominadas.map(x => esc(x[0])).slice(0, 30).join(', ') || '—'}</p><p>🌿 ${d.ph.desenvolvendo.map(x => esc(x[0])).slice(0, 30).join(', ') || '—'}</p><p>🌱 ${d.ph.comecando.map(x => esc(x[0])).slice(0, 30).join(', ') || '—'}</p>
+      ${d.sims.length ? `<h2>${tx('Simulados', 'Practice tests')}</h2><table>${d.sims.map(t => `<tr><td>${fmtD(String(t.iniciada_em).slice(0, 10))}</td><td>${t.total} ${tx('perguntas', 'questions')}</td><td><b>${fmtN1(t.leitura.simulado.nota)}</b></td></tr>`).join('')}</table>` : ''}
+      <p class="d">${DISC()}</p><button onclick="print()">🖨️ ${tx('Salvar em PDF / imprimir', 'Save as PDF / print')}</button><script>setTimeout(()=>print(),400)<\/script></body></html>`);
+    w.document.close();
   }
 
   /* ================= corrigir ================= */
@@ -185,6 +269,77 @@
     });
   }
 
+  /* ================= o que está sendo estudado agora ================= */
+  const AT = q => QKEngine.prototype.answerText.call({}, q);
+  // instancia um exemplo de pergunta com números variáveis (para os pais verem)
+  function exemplo(q, lang) { if (!q.vars) return q; try { const E = Object.create(QKEngine.prototype); E.Q = { [q.id]: q }; E.child = { idioma_app: lang === 'en' ? 'en' : 'pt-BR' }; const v = E.question('TV:' + q.id + ':' + (Date.now() % 99991)); return v || q; } catch (e) { return q; } }
+  async function estudandoData() {
+    const ids = A().kids.map(k => k.id);
+    const [lics, progs, ts, tasks] = await Promise.all([
+      DB.sel('licoes', { inn: { crianca_id: ids }, order: 'criado_em.desc', limit: 120 }).catch(() => []),
+      DB.sel('progresso', { inn: { crianca_id: ids }, eq: { chave: 'main' } }).catch(() => []),
+      DB.sel('tentativas', { inn: { crianca_id: ids }, gte: { iniciada_em: addDays(today(), -60) }, order: 'iniciada_em.desc', limit: 200 }).catch(() => []),
+      DB.sel('ia_tarefas', { eq: { familia_id: A().fam.id }, order: 'criado_em.desc', limit: 120 }).catch(() => [])]);
+    return { lics, progs, ts, tasks };
+  }
+  // ritmo até a prova: dá tempo de ver todas as perguntas (2 vezes cada)?
+  function ritmo(kid, lic, prog, seenTotal) {
+    const c = lic.conteudo || {}, qs = (c.questions || []).filter(q => q.pilar !== 'leitura'), N = qs.length;
+    const steps = Math.min(40, Math.round((kid.minutos || 15) * 0.6 + 4)), perDay = Math.max(2, Math.round(steps * ((kid.pilares || {}).reforco || 35) / 100));
+    const need = Math.max(0, 2 * N - seenTotal);
+    if (!c.data_prova) return { N, need, perDay, msg: need ? tx(`Faltam ~${need} respostas para ela ver todas as perguntas 2 vezes. Com ${kid.minutos} min por dia, leva uns ${Math.ceil(need / perDay)} dias.`, `About ${need} answers left to see every question twice. At ${kid.minutos} min a day, about ${Math.ceil(need / perDay)} days.`) : tx('Todas as perguntas já foram vistas pelo menos 2 vezes. 👏', 'Every question has been seen at least twice. 👏'), ok: true };
+    const dias = kid.dias || [1, 2, 3, 4, 5]; let D = 0; for (let d = today(); d < c.data_prova; d = addDays(d, 1)) if (dias.includes(new Date(d + 'T12:00').getDay())) D++;
+    if (c.data_prova < today()) return { N, need, perDay, past: true, msg: tx('A data da prova já passou.', 'The test date has passed.'), ok: true };
+    const pd = D ? Math.ceil(need / D) : need, ok = pd <= perDay;
+    const minNeed = Math.min(60, Math.ceil(((pd / (((kid.pilares || {}).reforco || 35) / 100)) - 4) / 0.6 / 5) * 5);
+    return { N, need, perDay, D, pd, ok, msg: !need ? tx('Ela já viu todas as perguntas 2 vezes. Agora é revisar e fazer um simulado. ✅', 'She has seen every question twice. Now review and take a practice test. ✅')
+      : ok ? tx(`Dá tempo ✅ Faltam ${D} dias de estudo até a prova; ~${pd} perguntas por dia cobrem tudo 2 vezes.`, `On track ✅ ${D} study days left; ~${pd} questions a day cover everything twice.`)
+      : tx(`Não dá tempo com ${kid.minutos} min por dia ⚠️ Faltam ${D} dias de estudo e ~${pd} perguntas por dia. Sugestão: subir para ${Math.max(minNeed, (kid.minutos || 15) + 5)} min por dia, estudar também no fim de semana, ou dar prioridade a esta matéria.`, `Not enough time at ${kid.minutos} min a day ⚠️ ${D} study days left, ~${pd} questions a day. Try ${Math.max(minNeed, (kid.minutos || 15) + 5)} min a day, add weekend days, or prioritize this subject.`) };
+  }
+  function estudandoHtml(data) {
+    const { lics, progs, ts, tasks } = data;
+    if (!lics.length) return `<section class="${card} mb-5 flex items-center gap-3">${I('auto_awesome', 'text-[26px] text-primary')}<div><h2 class="text-headline-md text-on-surface">${tx('O que está sendo estudado', 'What is being studied')}</h2><p class="text-body-sm text-on-surface-variant">${tx('Quando a IA criar as lições a partir do material enviado, elas aparecem aqui com todas as perguntas e o ritmo até a prova.', 'When the AI creates lessons from your material, they show up here with every question and the pace until the test.')}</p></div></section>`;
+    const byKid = A().kids.map(k => ({ k, ls: lics.filter(l => l.crianca_id === k.id) })).filter(x => x.ls.length);
+    return `<section class="mb-6 space-y-3"><div class="flex items-center justify-between gap-2"><h2 class="text-headline-md text-on-surface">${I('auto_awesome', 'text-[22px] text-primary align-middle')} ${tx('O que está sendo estudado', 'What is being studied')}</h2></div>
+      ${byKid.map(({ k, ls }) => { const pr = ((progs.find(p => p.crianca_id === k.id) || {}).dados) || {}, qn = pr.qn || {};
+        return `<div class="space-y-3"><div class="flex items-center justify-between gap-2"><span class="text-label-lg text-on-surface">${esc(k.avatar)} ${esc(k.apelido)}</span><button data-zerar="${k.id}" class="text-label-sm text-error underline">${tx('Zerar todas as matérias', 'Clear all subjects')}</button></div>
+        ${ls.map(l => { const c = l.conteudo || {}, qs = (c.questions || []), lid = l.id, seen = qs.reduce((a, q) => a + (qn[q.id] || 0), 0), vistos = qs.filter(q => qn[q.id]).length;
+          const its = ts.filter(t => t.crianca_id === k.id).flatMap(t => t.itens || []).filter(i => String(i.qid).replace(/^TV:/, '').startsWith(lid + '-') && i.correct !== null && i.correct !== undefined);
+          const acc = its.length ? Math.round(100 * its.filter(i => i.correct).length / its.length) : null;
+          const tk = tasks.find(t => t.resultado && t.resultado.licao === lid) || {}, en = tk.entrada || {};
+          const rt = ritmo(k, l, pr, seen), pct = qs.length ? Math.round(100 * vistos / qs.length) : 0;
+          return `<div class="${card} space-y-3 ${l.pausada ? 'opacity-60' : ''}">
+            <div class="flex items-start gap-3"><span class="text-[30px] leading-none">${esc(c.icone || '📸')}</span><div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">${c.modo_prova ? `<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-label-sm">📝 ${tx('Prova', 'Test')}${c.data_prova ? ' ' + new Date(c.data_prova + 'T12:00').toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' }) : ''}</span>` : `<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface text-label-sm">📘 ${tx('Estudo', 'Study')}</span>`}${l.foco ? `<span class="px-2 py-0.5 rounded-full bg-primary-container text-on-primary text-label-sm">⭐ ${tx('Prioridade', 'Priority')}</span>` : ''}${l.pausada ? `<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-label-sm">⏸ ${tx('Pausada', 'Paused')}</span>` : ''}</div>
+              <b class="text-label-lg text-on-surface block mt-1">${esc(l.titulo || c.titulo || '')}</b>
+              <span class="text-body-sm text-on-surface-variant">${esc([en.materia, en.obs ? '“' + en.obs + '”' : '', new Date(l.criado_em).toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' })].filter(Boolean).join(' · '))}</span></div></div>
+            <div><div class="flex justify-between text-label-sm text-on-surface-variant mb-1"><span>${vistos}/${qs.length} ${tx('perguntas já vistas', 'questions seen')}</span><span>${acc === null ? '' : tx('Acertos', 'Accuracy') + ': ' + acc + '%'}</span></div><div class="h-2.5 bg-surface-container-high rounded-full overflow-hidden"><div class="h-full bg-primary-container rounded-full" style="width:${pct}%"></div></div></div>
+            <p class="text-body-sm ${rt.ok ? 'text-on-surface' : 'text-error'} bg-surface-container-low rounded-xl p-3 flex gap-2">${I(rt.ok ? 'insights' : 'warning', 'text-[18px] shrink-0 ' + (rt.ok ? 'text-primary' : 'text-error'))}<span>${rt.msg}</span></p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <button data-perg="${k.id}|${lid}" class="h-11 rounded-xl bg-primary-container text-on-primary text-label-md flex items-center justify-center gap-1.5">${I('quiz', 'text-[18px]')} ${tx('Perguntas', 'Questions')} (${qs.length})</button>
+              <button data-lacao="${k.id}|${lid}|${l.foco ? 'desfocar' : 'focar'}" class="h-11 rounded-xl bg-surface-container text-on-surface text-label-md">${l.foco ? tx('Tirar prioridade', 'Remove priority') : '⭐ ' + tx('Priorizar', 'Prioritize')}</button>
+              <button data-lacao="${k.id}|${lid}|${l.pausada ? 'ativar' : 'pausar'}" class="h-11 rounded-xl bg-surface-container text-on-surface text-label-md">${l.pausada ? '▶ ' + tx('Ativar', 'Resume') : '⏸ ' + tx('Pausar', 'Pause')}</button>
+              <button data-lacao="${k.id}|${lid}|apagar" class="h-11 rounded-xl bg-surface-container text-error text-label-md">🗑 ${tx('Apagar', 'Delete')}</button></div></div>`; }).join('')}</div>`; }).join('')}</section>`;
+  }
+  function perguntasSheet(lic, prog, ts) {
+    const c = lic.conteudo || {}, qs = c.questions || [], qn = (prog && prog.qn) || {};
+    const its = ts.flatMap(t => t.itens || []);
+    const st = q => { const xs = its.filter(i => String(i.qid).replace(/^TV:/, '').split(':')[0] === q.id && i.correct !== null && i.correct !== undefined); return xs.length ? `${xs.filter(i => i.correct).length}/${xs.length} ${tx('certas', 'right')}` : tx('ainda não apareceu', 'not shown yet'); };
+    const ov = document.createElement('div');
+    ov.className = 'fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-6';
+    ov.innerHTML = `<div class="bg-surface w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 space-y-3">
+      <div class="flex items-center justify-between gap-2"><h2 class="text-headline-md text-on-surface">${esc(lic.titulo || c.titulo || '')}</h2><button data-x class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center shrink-0">${I('close', 'text-[22px]')}</button></div>
+      <p class="text-body-sm text-on-surface-variant">${qs.length} ${tx('perguntas criadas', 'questions created')} · ${qs.filter(q => q.vars).length} ${tx('com números que mudam a cada vez (variações sem fim)', 'with numbers that change every time (endless variations)')} · ${Object.keys(c.defs_alt || {}).length} ${tx('palavras com explicações alternativas', 'words with alternative explanations')}. ${tx('Respostas certas em verde.', 'Correct answers in green.')}</p>
+      ${c.passage && c.passage.text ? `<details class="bg-surface-container-low rounded-2xl p-3"><summary class="text-label-md text-on-surface cursor-pointer">📖 ${tx('Texto de leitura', 'Reading text')}: ${esc(c.passage.title || '')}</summary><div class="text-body-md text-on-surface mt-2 space-y-2">${String(c.passage.text).split(/\n\s*\n/).map(p => `<p>${md(p.replace(/\[\[([^|\]]+)\|([^\]]+)\]\]/g, '**$1**'))}</p>`).join('')}</div></details>` : ''}
+      ${qs.map((q, i) => { const ex = exemplo(q, lic.idioma); return `<div class="${card} space-y-1.5"><div class="flex items-center gap-2 flex-wrap"><span class="text-label-sm text-on-surface-variant">${i + 1}.</span><span class="px-2 py-0.5 rounded-full bg-surface-container-high text-label-sm text-on-surface">${esc(q.pilar === 'leitura' ? tx('Leitura', 'Reading') : A().skillInfo(q.skill || '').name)}</span>${q.vars ? `<span class="px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed text-label-sm">🔀 ${tx('números variam', 'numbers vary')}</span>` : ''}<span class="text-label-sm text-on-surface-variant ml-auto">${tx('Vista', 'Seen')} ${qn[q.id] || 0}x · ${st(q)}</span></div>
+        <p class="text-label-lg text-on-surface">${md(ex.prompt)}</p>
+        ${q.type === 'mc' ? `<ul class="text-body-sm space-y-0.5">${ex.options.map((o, j) => `<li class="${j === (q.answer || 0) ? 'text-primary font-extrabold' : 'text-on-surface-variant'}">${j === (q.answer || 0) ? '✓' : '·'} ${md(o)}</li>`).join('')}</ul>` : `<p class="text-body-md text-primary font-extrabold whitespace-pre-line">✓ ${md(AT(ex))}</p>`}
+        ${ex.explain ? `<p class="text-body-sm text-on-surface-variant">${md(ex.explain)}</p>` : ''}</div>`; }).join('')}
+      <p class="text-body-sm text-on-surface-variant">${tx('Achou uma pergunta errada ou estranha? Pause esta matéria e nos avise pelo e-mail de suporte.', 'Found a wrong or odd question? Pause this subject and let us know by support email.')}</p></div>`;
+    document.body.appendChild(ov);
+    ov.onclick = e => { if (e.target === ov || e.target.closest('[data-x]')) ov.remove(); };
+  }
+
   /* ================= enviar material ================= */
   const MAX_ENVIO = 10; // páginas por envio
   const TIPOS = () => [['estudo', '📘', tx('Estudo do dia a dia', 'Everyday study'), tx('Guia de estudo, lição de casa', 'Study guide, homework')], ['prova', '📝', tx('Cai na prova', 'On the test'), tx('Com a data da prova', 'With the test date')], ['outro', '➕', tx('Outro', 'Other'), tx('Qualquer outro material', 'Anything else')]];
@@ -206,7 +361,7 @@
   async function material() {
     if (!A().kids.length) return newChild(true);
     const fam = A().fam.id; const mes = today().slice(0, 7);
-    const [mats, lim] = await Promise.all([DB.sel('materiais', { eq: { familia_id: fam }, order: 'criado_em.desc', limit: 80 }), DB.sel('limites_ia', { eq: { plano: (A().sub || {}).plano || 'teste' } }).catch(() => [])]);
+    const [mats, lim, est] = await Promise.all([DB.sel('materiais', { eq: { familia_id: fam }, order: 'criado_em.desc', limit: 80 }), DB.sel('limites_ia', { eq: { plano: (A().sub || {}).plano || 'teste' } }).catch(() => []), estudandoData()]);
     const usado = mats.filter(m => String(m.criado_em).slice(0, 7) === mes).length; const max = (lim[0] && lim[0].paginas_mes) || 60;
     let files = [], tipo = 'estudo';
     const kidOf = id => A().kids.find(k => k.id === id);
@@ -214,7 +369,7 @@
     const tipoDe = m => m.tipo || (m.modo_prova ? 'prova' : 'estudo');
     const badge = m => { const t = TIPOS().find(x => x[0] === tipoDe(m)) || TIPOS()[0]; return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-label-sm ${t[0] === 'prova' ? 'bg-secondary-fixed text-on-secondary-fixed' : 'bg-surface-container-high text-on-surface'}">${t[1]} ${t[2]}${t[0] === 'prova' && m.data_prova ? ' · ' + new Date(m.data_prova + 'T12:00').toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' }) : ''}</span>`; };
     const grupos = lotes(mats);
-    shell(`<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
+    shell(`${estudandoHtml(est)}<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
       <section class="lg:col-span-3 ${card} space-y-1 relative overflow-hidden">
         <div class="absolute -top-10 -right-10 w-36 h-36 bg-primary-container/10 rounded-full blur-2xl pointer-events-none"></div>
         <div class="flex items-center gap-3 relative"><div class="w-12 h-12 rounded-2xl bg-primary-container text-on-primary flex items-center justify-center">${I('photo_camera', 'text-[26px]', 1)}</div>
@@ -256,6 +411,10 @@
       app().querySelectorAll('[data-tipo]').forEach(x => { const on = x.dataset.tipo === tipo; x.classList.toggle('border-primary-container', on); x.classList.toggle('bg-primary-fixed/30', on); x.classList.toggle('border-surface-container-high', !on); x.classList.toggle('bg-surface-container-lowest', !on); });
     });
     app().querySelectorAll('[data-g]').forEach(b => b.onclick = () => verEnvio(grupos[+b.dataset.g], badge, status));
+    app().querySelectorAll('[data-perg]').forEach(b => b.onclick = () => { const [kid, lid] = b.dataset.perg.split('|'); const l = est.lics.find(x => x.id === lid && x.crianca_id === kid); perguntasSheet(l, ((est.progs.find(p => p.crianca_id === kid) || {}).dados) || {}, est.ts.filter(t => t.crianca_id === kid)); });
+    const acao = async (kid, lid, ac) => { try { await DB.rpc('gerir_licao', { crianca: kid, licao: lid, acao: ac }); toast('✅'); material(); } catch (x) { toast(/gerir_licao|function|schema/i.test(x.message) ? tx('Falta rodar o SQL 06 no Supabase para usar isso.', 'Run SQL 06 in Supabase to use this.') : x.message, 4500); } };
+    app().querySelectorAll('[data-lacao]').forEach(b => b.onclick = () => { const [kid, lid, ac] = b.dataset.lacao.split('|'); if (ac === 'apagar' && !confirm(tx('Apagar esta matéria e todas as perguntas dela? Não dá para desfazer.', 'Delete this subject and all its questions? This cannot be undone.'))) return; acao(kid, lid, ac); });
+    app().querySelectorAll('[data-zerar]').forEach(b => b.onclick = () => { if (!confirm(tx('Apagar TODAS as matérias e perguntas desta criança? Não dá para desfazer.', "Delete ALL of this child's subjects and questions? This cannot be undone."))) return; acao(b.dataset.zerar, '', 'zerar'); });
     $('#send').onclick = async () => {
       const err = $('#err'); err.textContent = '';
       if (usado + files.length > max) { err.textContent = tx(`Limite do mês: ${max} páginas.`, `Monthly limit: ${max} pages.`); return; }

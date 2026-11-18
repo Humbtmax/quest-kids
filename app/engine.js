@@ -30,7 +30,7 @@
     ['completed', 'skills', 'wordbank', 'dias', 'seen', 'counts'].forEach(k => { if (!this.prog[k] || typeof this.prog[k] !== 'object') this.prog[k] = {}; });
     if (!Array.isArray(this.prog.review)) this.prog.review = [];
     if (!Array.isArray(this.prog.badges)) this.prog.badges = [];
-    this.licoes = (licoes || []).map(l => Object.assign({ _ai: true }, l.conteudo, { id: 'AI-' + l.id, criado_em: l.criado_em, para_dia: l.para_dia }));
+    this.licoes = (licoes || []).filter(l => !l.pausada).map(l => Object.assign({ _ai: true }, l.conteudo, { id: 'AI-' + l.id, criado_em: l.criado_em, para_dia: l.para_dia, foco: !!l.foco }));
     this.index();
   }
   const E = Engine.prototype;
@@ -109,7 +109,7 @@
   };
   E.readingList = function () {
     const d = today(); const list = [];
-    this.licoes.slice().sort((a, b) => (b.modo_prova ? 1 : 0) - (a.modo_prova ? 1 : 0) || String(a.criado_em).localeCompare(String(b.criado_em))).forEach(l => list.push(l));
+    this.licoes.slice().sort((a, b) => (b.foco ? 1 : 0) - (a.foco ? 1 : 0) || (b.modo_prova ? 1 : 0) - (a.modo_prova ? 1 : 0) || String(a.criado_em).localeCompare(String(b.criado_em))).forEach(l => list.push(l));
     if (this.pack) {
       (window.PLAN || []).filter(x => !x.from || x.from <= d).forEach(x => list.push(x));
       (window.CORNERS || []).forEach(x => list.push(x));
@@ -222,8 +222,33 @@
   E.goalDone = function () { return this.stepsToday() >= this.goalSteps() || this.minutesToday() >= this.goalMin(); };
   E.dayPct = function () { return Math.min(1, Math.max(this.stepsToday() / this.goalSteps(), this.minutesToday() / this.goalMin())); };
 
+  /* ---------- simulado: N perguntas, sem resposta na hora, nota no fim ---------- */
+  E.simPool = function (ids) {
+    let ls = this.licoes; if (ids && ids.length) ls = ls.filter(l => ids.includes(l.id) || ids.includes(l.id.replace(/^AI-/, '')));
+    let qs = ls.flatMap(l => (l.questions || []).filter(q => q.pilar !== 'leitura' && q.type !== 'text'));
+    if (!qs.length) qs = Object.values(window.POOL || {}).flat().filter(q => q.type !== 'text' && !READ_SKILLS.includes(q.skill));
+    return qs;
+  };
+  E.startSim = function (cfg) {
+    const pool = shuffle(this.simPool(cfg.licoes)); const n = Math.min(cfg.n || 10, Math.max(pool.length, 0) * 2 || 0);
+    const pick = []; for (let i = 0; pick.length < n && i < n * 3; i++) { const q = pool[i % pool.length]; if (!q) break; const id = (q.vars && this.variant(q)) || (i < pool.length ? q.id : null); if (id && !pick.includes(id)) pick.push(id); }
+    const S = this.s = { id: uid(), started: new Date().toISOString(), more: false, simulado: Object.assign({}, cfg, { n: pick.length }), sec: 0, earned: 0, cap: pick.length, units: 0, wordsEnd: 0, P: { leitura: 0, palavras: 0, reforco: 100 },
+      targets: { leitura: 0, palavras: 0, reforco: 3600 }, spent: { leitura: 0, palavras: 0, reforco: 0 }, station: 'reforco', queue: pick.map(qid => ({ kind: 'q', qid, source: 'simulado' })), items: [], used: [], reading: null, readingDone: false, matched: true, pageRec: [], pagesSec: [] };
+    return S;
+  };
+  // nota estimada (0 a 10) pelos acertos dos últimos dias — é só uma estimativa
+  E.estimate = function (days, endOffset) {
+    let q = 0, ok = 0; const end = endOffset || 0;
+    for (let i = end; i < end + (days || 21); i++) { const x = this.prog.dias[addDays(today(), -i)]; if (x) { q += x.q || 0; ok += x.ok || 0; } }
+    const sims = (this.prog.sims || []).filter(s => s.d >= addDays(today(), -(end + (days || 21))) && s.d <= addDays(today(), -end));
+    if (q < 5 && !sims.length) return null;
+    const base = q ? 10 * ok / q : null, simAvg = sims.length ? sims.reduce((a, s) => a + s.nota, 0) / sims.length : null;
+    const v = base === null ? simAvg : simAvg === null ? base : base * 0.5 + simAvg * 0.5;
+    return Math.round(v * 10) / 10;
+  };
   E.startSession = function (opts) {
     opts = opts || {};
+    if (opts.simulado) return this.startSim(opts.simulado);
     const goal = this.goalMin() * 60, done = ((this.prog.dias[today()] || {}).seg || 0);
     const P = Object.assign({ leitura: 40, palavras: 25, reforco: 35 }, this.child.pilares || {});
     const tot = P.leitura + P.palavras + P.reforco || 100;
@@ -293,7 +318,7 @@
         S.wordsEnd = S.units + Math.round(rest * (pw + pr ? pw / (pw + pr) : 0.4));
         continue;
       }
-      if (S.units >= S.cap) return null;
+      if (S.units >= S.cap || S.simulado) return null;
       if (S.sec >= tot * 1.6 && S.items.length >= 3) return null;      // segurança: nunca muito além do tempo combinado
       if (S.wordsEnd === null) S.wordsEnd = S.units + Math.round((S.cap - S.units) * (S.P.palavras + S.P.reforco ? S.P.palavras / (S.P.palavras + S.P.reforco) : 0.4));
       if (S.station === 'palavras' && S.units >= S.wordsEnd) { S.station = 'reforco'; continue; }
@@ -365,11 +390,12 @@
     give('wordwiz', Object.keys(p.wordbank).length >= 25); give('reader10', Object.keys(p.completed).length >= 10);
     p.savedAt = Date.now();
     const att = {
-      id: S.id, crianca_id: this.child.id, licao_id: S.reading ? S.reading.id : 'PRATICA-' + d, tipo: S.more ? 'pratica' : 'daily', pilar: 'misto',
+      id: S.id, crianca_id: this.child.id, licao_id: S.simulado ? 'SIMULADO-' + d : S.reading ? S.reading.id : 'PRATICA-' + d, tipo: S.simulado ? 'simulado' : S.more ? 'pratica' : 'daily', pilar: 'misto',
       iniciada_em: S.started, terminada_em: new Date().toISOString(), duracao_seg: Math.round(S.sec), total: S.items.length,
       acertos: S.items.filter(i => i.correct).length, pendentes: S.items.filter(i => i.status === 'pending').length, nota_pct: pct, estrelas: stars,
       itens: S.items, leitura: S.reading ? { titulo: S.reading.title, pages: S.pagesSec, recordings: S.pageRec, medidor: S.meters || null } : null
     };
+    if (S.simulado && !partial) { const nota = graded.length ? Math.round(100 * graded.filter(i => i.correct).length / graded.length) / 10 : 0; att.leitura = { titulo: 'Simulado', simulado: Object.assign({}, S.simulado, { nota, seg: Math.round(S.sec) }) }; p.sims = (p.sims || []).concat({ d, nota, n: graded.length, seg: Math.round(S.sec) }).slice(-30); }
     return { att, pct, firstPct, stars, coins: S.earned, bonus, newBadges, right: graded.filter(i => i.correct).length, total: graded.length };
   };
 

@@ -15,7 +15,20 @@
       familias: [{ id: f, nome: 'Família Demo', termos_aceitos_em: iso(10), termos_versao: '2026-11-17' }], membros: [{ familia_id: f, user_id: 'demo-user', papel: 'dono' }],
       assinaturas: [{ familia_id: f, plano: 'teste', status: 'trialing', com_ia: true, valido_ate: new Date(Date.now() + 7 * 864e5).toISOString() }],
       criancas: [{ id: k, familia_id: f, apelido: 'Gabi', avatar: '🦄', idade: 10, serie: '5th grade', idioma_app: 'en', idiomas: ['en', 'pt-BR'], estilo: 'rosa', tema: 'claro', minutos: 20, pacote: 'gabi-en5', dias: [1, 2, 3, 4, 5], pilares: { leitura: 40, palavras: 25, reforco: 35 }, criado_em: iso(10) }],
-      progresso: [], licoes: [], convites: [], ia_tarefas: [], pins: [], senha_pais: '2026',
+      progresso: [], convites: [], pins: [], senha_pais: '2026',
+      licoes: [{ id: 'AIdemo1', crianca_id: k, pilar: 'misto', idioma: 'en', titulo: 'Family Budget Boss', pausada: false, foco: false, criado_em: iso(1), conteudo: {
+        titulo: 'Family Budget Boss', icone: '💵', modo_prova: true, data_prova: iso(-3).slice(0, 10),
+        passage: { title: 'Where does the money go?', text: 'Every month a family gets [[income|the money that comes in, like a paycheck]]. Then they pay [[expenses|the things money is spent on, like rent and food]].\n\nA [[budget|a plan that says where each dollar will go]] helps the family decide before the month starts. In a zero-based budget, every dollar gets a job, so income minus planned spending equals zero.\n\nSmart families also keep an [[emergency fund|money saved for surprises, like a broken car]].' },
+        defs_alt: { income: ['what you earn', 'money you receive'], expenses: ['what you spend', 'costs you pay'], budget: ['a money plan', 'a spending plan'], 'emergency fund': ['savings for surprises', 'a rainy-day fund'] },
+        questions: [
+          { id: 'AIdemo1-1', pilar: 'leitura', skill: 'main idea', type: 'mc', prompt: 'What is the main idea of the text?', options: ['A budget helps a family plan where money goes', 'Families should never spend money', 'Cars break a lot', 'Income is always the same'], answer: 0, explain: 'The text explains how a budget gives every dollar a job.' },
+          { id: 'AIdemo1-2', pilar: 'reforco', skill: 'budget', type: 'num', prompt: 'A family earns ${R} a month and has planned ${G} of spending. How many dollars still need a job?', vars: { R: [2000, 6000, 250], G: [1000, 5000, 250] }, cond: 'R>G', answers: ['{=R-G}'], explain: '${R} − ${G} = ${=R-G}.' },
+          { id: 'AIdemo1-3', pilar: 'reforco', skill: 'budget', type: 'mc', prompt: 'True or false: in a zero-based budget, income minus planned spending equals zero.', options: ['True', 'False'], answer: 0, explain: 'Every dollar gets a job, so nothing is left without a plan.' },
+          { id: 'AIdemo1-4', pilar: 'reforco', skill: 'saving', type: 'mc', prompt: 'Complete the sentence: Money saved for surprises is called an ____.', options: ['emergency fund', 'expense', 'income', 'allowance'], answer: 0, explain: 'An emergency fund is ready for surprises.' },
+          { id: 'AIdemo1-5', pilar: 'reforco', skill: 'saving', type: 'num', prompt: 'Lia saves ${A} every week. How much does she save in {W} weeks?', vars: { A: [3, 12, 1], W: [3, 8, 1] }, answers: ['{=A*W}'], explain: '{A} × {W} = {=A*W}.' },
+          { id: 'AIdemo1-6', pilar: 'reforco', skill: 'budget', type: 'order', prompt: 'Build the sentence', items: ['A budget', 'gives', 'every dollar', 'a job'], explain: 'A budget gives every dollar a job.' }
+        ] } }],
+      ia_tarefas: [{ id: 't1', familia_id: f, crianca_id: k, tipo: 'gerar_licao', status: 'pronto', entrada: { materia: 'Math — family budget', tipo: 'prova', obs: 'chapter 5', modo_prova: true, data_prova: iso(-3).slice(0, 10) }, resultado: { licao: 'AIdemo1', paginas: 2 }, criado_em: iso(1) }],
       materiais: [['m1', 'pronto', 3, 'estudo', 'Science — states of matter', 'chapter 4, pages 30–35', null], ['m2', 'pronto', 3, 'estudo', 'Science — states of matter', 'chapter 4, pages 30–35', null], ['m3', 'enviado', 0.1, 'prova', 'Math — fractions', 'the teacher said mixed numbers will be on it', iso(-3).slice(0, 10)]].map(([id, status, d, tipo, materia, obs, dp]) => ({ id, familia_id: f, crianca_id: k, caminho: f + '/' + id + '.jpg', materia, obs, tipo, lote: 'lote-' + tipo, modo_prova: tipo === 'prova', data_prova: dp, status, criado_em: iso(d), apagar_em: iso(d - 7) })),
       tentativas: [sess(1, 21, 8, 10, { itens: [{ qid: 'demo-txt', station: 'reforco', status: 'pending', at: iso(1), prompt: 'Describe a real situation at school where someone could be **magnanimous**.', rubric: '2 = a clear situation where someone forgives or is generous; 1 = vague; 0 = off-topic.', answer: 'When my friend broke my pencil and said sorry, I said it was ok and gave her another one.' }], pendentes: 1 }), sess(2, 18, 6, 9), sess(4, 24, 9, 10)]
     };
@@ -271,6 +284,11 @@
       if (fn === 'conferir_pin') { const p = db.pins.find(p => p.crianca_id === a.crianca); return !p || p.pin === a.pin; }
       if (fn === 'tem_pin') return !!db.pins.find(p => p.crianca_id === a.crianca);
       if (fn === 'tem_senha_pais') return !!db.senha_pais;
+      if (fn === 'gerir_licao') { const L = (db.licoes || []).filter(l => l.crianca_id === a.crianca); const one = L.find(l => l.id === a.licao);
+        if (a.acao === 'pausar' && one) one.pausada = true; if (a.acao === 'ativar' && one) one.pausada = false;
+        if (a.acao === 'focar') L.forEach(l => { l.foco = l.id === a.licao; }); if (a.acao === 'desfocar') L.forEach(l => { l.foco = false; });
+        if (a.acao === 'apagar') db.licoes = db.licoes.filter(l => !(l.crianca_id === a.crianca && l.id === a.licao)); if (a.acao === 'zerar') db.licoes = db.licoes.filter(l => l.crianca_id !== a.crianca);
+        dsave(db); return null; }
       if (fn === 'aceitar_termos') { (db.familias || []).forEach(x => { x.termos_aceitos_em = new Date().toISOString(); x.termos_versao = a.versao; }); dsave(db); return null; }
       if (fn === 'definir_senha_pais') { if (!/^\d{4}$/.test(a.senha)) throw new Error('A senha precisa ter 4 números'); db.senha_pais = a.senha; dsave(db); return null; }
       if (fn === 'conferir_senha_pais') return !!db.senha_pais && db.senha_pais === a.senha;
