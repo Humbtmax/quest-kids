@@ -675,6 +675,180 @@ So the next time you drink a cold glass of water with ice, remember: you are hol
 }
 );
 
+/* ========== NEW LESSONS from school worksheets (Nov 17, 2026) ========== */
+window.LESSONS.push(
+{
+  id: 'L19', week: 0, day: 0, icon: '🛟', title: 'Reading: Rapids Ahead', long: true,
+  passage: {
+    title: 'Rapids Ahead',
+    text: `Maya had been waiting all summer for the rafting trip. Now she sat on the edge of the yellow raft with her cousins, her life vest buckled tight, while the river carried them deeper into the canyon.
+
+Before they climbed in, their guide, Rosa, had given a safety talk. "If you fall in, don't try to stand up," she said. "Lie on your back, point your feet downstream, and keep your head up. Your feet will bump the rocks so your head doesn't." Maya's cousin Leo had rolled his eyes. "It's just a big water slide," he whispered. Maya laughed, but she listened anyway.
+
+The river was calm at first. Then the water began to roar. Ahead, white foam churned around huge rocks. These were the [[rapids|places where a river runs fast and rough over rocks]], and they looked [[monstrous|huge and frightening, like a monster]].
+
+"Forward paddle!" Rosa shouted. "Hard!"
+
+The raft dipped, bounced, and slammed against a wave. The [[momentum|the force something has while it is moving]] of the bump tossed Maya right over the side.
+
+Cold water swallowed her. The river grabbed her, spun her, and [[pummeled|hit again and again]] her with waves. For a moment she couldn't tell which way was up. Her heart pounded. She wanted to thrash and grab at anything, but she remembered the safety talk.
+
+*On your back. Feet first. Head up.*
+
+Maya rolled onto her back and pointed her toes downstream. She thought about the last soccer game of the season, when she had taken a deep breath before the penalty kick and blocked out the noise of the crowd. *Breathe,* she told herself. *Stay calm.*
+
+The canyon walls rose on both sides like the sides of a giant's bathtub, tall and steep, with nothing to hold on to. But around the bend, the water slowed. Maya spotted a calm spot near a sandy bank and kicked toward it with all her strength.
+
+A second raft was waiting there. Its crew waved their paddles [[frantically|in a wild, worried, hurried way]]. "Swim to us! You can do it!"
+
+Maya swam, reached out, and felt strong hands pull her aboard by her life vest. She lay in the bottom of the raft, shivering and breathing hard.
+
+A few minutes later, her own raft pulled alongside. Leo's face was pale. "You okay?" he asked quietly.
+
+"I'm okay," Maya said. "I did what Rosa told us."
+
+Rosa smiled. "You kept your head. The river is powerful, but you were smart."
+
+For the rest of the trip, Leo sat up straight and listened to every word Rosa said. And Maya looked at the rushing water a little differently. It was beautiful, but now she knew it deserved respect.`
+  },
+  questions: [
+    mc('L19-1', 'main_idea', 'Which sentence best describes the **theme** of the story?',
+      ['Nature is powerful, so it is important to stay calm and follow safety rules', 'Rafting is too dangerous for kids', 'Cousins should never laugh at each other', 'Rivers are always calm around the bend'],
+      'Maya survives because she stays calm and follows Rosa\'s safety rules, and she learns to respect the river.'),
+    mc('L19-2', 'evidence', 'Which detail from the story **best supports** that theme?',
+      ['"You kept your head. The river is powerful, but you were smart."', '"Maya had been waiting all summer for the rafting trip."', '"It\'s just a big water slide," he whispered.', 'Maya sat on the edge of the yellow raft with her cousins.'],
+      'Rosa\'s words connect both parts of the theme: the river is powerful, and Maya stayed calm and smart.'),
+    mc('L19-3', 'figurative', 'What does the author mean by **"The canyon walls rose on both sides like the sides of a giant\'s bathtub"**?',
+      ['The walls were very tall and steep', 'The walls were full of water', 'The walls were smooth and white', 'The walls were small and low'],
+      'It is a simile: like a bathtub\'s sides, the walls were tall and steep, with nothing to grab.'),
+    mc('L19-4', 'inference', 'How does Maya respond when she falls into the water?',
+      ['She remembers the safety rules and follows them', 'She panics and forgets everything', 'She tries to stand up on the rocks', 'She waits for someone to rescue her without moving'],
+      'She rolls onto her back, points her feet downstream, and stays calm, just like Rosa taught.'),
+    mc('L19-5', 'context', '"The **momentum** of the bump tossed Maya right over the side." Momentum means…',
+      ['the force something has while it is moving', 'a feeling of fear', 'a kind of paddle', 'a calm part of the river'],
+      'The raft was moving fast, and that moving force threw Maya out.'),
+    mc('L19-6', 'context', 'The crew waved their paddles **frantically**. This means they waved them…',
+      ['in a wild, worried, hurried way', 'slowly and calmly', 'quietly and sadly', 'one time only'],
+      'They were worried about Maya and wanted her to see them quickly.'),
+    orderQ('L19-7', 'main_idea', 'Put the events in order.',
+      ['Rosa gives a safety talk', 'The raft hits the rapids and Maya falls in', 'Maya rolls onto her back with her feet downstream', 'Maya swims to the second raft', 'Leo starts listening carefully to Rosa'],
+      'Safety talk → falls in → follows the rules → swims to safety → Leo learns too.'),
+    txt('L19-8', 'inference', 'Why does Maya think about her soccer game when she is in the river? How does it help her?',
+      'She remembers how she stayed calm and blocked out the noise before a penalty kick; thinking of it helps her stay calm, breathe and not panic so she can follow the safety rules. Score 2 = connects the memory to staying calm + how it helped; 1 = mentions calm OR the memory only; 0 = incorrect.')
+  ]
+},
+{
+  id: 'L20', week: 0, day: 0, icon: '🕷️', title: 'Reading: Spooky or Sweet Spiders?', long: true,
+  passage: {
+    title: 'Don\'t Fear Your Eight-Legged Neighbors',
+    text: `Every October, fake spiders creep across windows, porches, and classroom doors. Because so many people are scared of spiders, they became a favorite Halloween decoration. But if you look closer, spiders are not monsters. They are some of the most amazing animals on Earth.
+
+**Masters of Disguise**
+
+Some spiders are **masters of disguise**. One kind curls up on a leaf and looks just like a bird dropping, so hungry birds fly right past. Other spiders hold up their front legs like [[antennae|feelers on an insect's head]] so they look like ants. They play hide-and-seek with every predator in the garden.
+
+**Loving Moms**
+
+A mother wolf spider carries her babies on her back **like a living backpack** until they are big enough to survive on their own.
+
+**Helpful Housemates**
+
+Spiders really **pull their weight** around the house. They quietly catch flies, mosquitoes, and other pests, and they never ask for a snack in return.
+
+**Artists and Dancers**
+
+For some spiders, a web is **a canvas**. The garden spider weaves a bright zigzag pattern into its web. Tiny peacock spiders have dancing **down to an art**: the males lift their colorful tails, wave their legs, and dance to impress a female.
+
+**Team Players**
+
+Most spiders live alone, but a few kinds are **social butterflies**. In Australia, some huntsman spiders live together in big family groups under tree bark and help raise the young ones.
+
+**Fishing Experts**
+
+Fishing spiders live near ponds. They rest their legs on the water, feel the tiny ripples, and catch small fish and tadpoles. Their legs **listen** to the water for their next meal.
+
+**Not So Dangerous**
+
+Only a very small number of spider species can seriously hurt people. Most spiders would much rather run away from you than bite you.
+
+So this Halloween, when you see a spider, don't scream. Say hello to one of nature's most talented neighbors.`
+  },
+  questions: [
+    mc('L20-1', 'main_idea', 'What is the **central idea** of the article?',
+      ['Spiders are amazing animals with special skills, so people shouldn\'t fear them', 'Spiders are the scariest animals on Earth', 'Spiders only live in Australia', 'Halloween is the best holiday of the year'],
+      'Every section shows a special skill, and the ending says not to scream but to appreciate them.'),
+    mc('L20-2', 'evidence', 'Which detail **best supports** the central idea?',
+      ['Only a very small number of spider species can seriously hurt people.', 'Fake spiders creep across windows every October.', 'Most spiders live alone.', 'Fishing spiders live near ponds.'],
+      'Showing that spiders are not very dangerous supports "don\'t fear them."'),
+    mc('L20-3', 'main_idea', 'How does the author show her **point of view** about spiders?',
+      ['By giving lots of interesting facts about what spiders can do', 'By saying no spider has ever bitten anyone', 'By telling scary stories about spiders', 'By listing different Halloween costumes'],
+      'Fact after fact about disguises, moms, art and fishing shows that the author admires spiders.'),
+    mc('L20-4', 'inference', 'What is the relationship between **spiders and Halloween** in the article?',
+      ['Spiders are used as Halloween decorations because many people fear them', 'Spiders only come out on Halloween night', 'Children dress up as spiders because spiders are cute', 'Halloween is when spiders build their webs'],
+      'The first paragraph says it: because so many people are scared of spiders, they became a favorite decoration.'),
+    sortQ('L20-5', 'figurative', 'Sort each phrase into the right kind of **figurative language**.',
+      ['Simile', 'Metaphor', 'Personification', 'Idiom'],
+      [['carries her babies like a living backpack', 0], ['a web is a canvas', 1], ['some spiders are masters of disguise', 1], ['their legs listen to the water', 2], ['they play hide-and-seek with every predator', 2], ['spiders pull their weight', 3], ['they have dancing down to an art', 3]],
+      'Simile uses like/as. Metaphor says something IS something else. Personification gives human actions to non-humans. An idiom is an expression with a hidden meaning.'),
+    mc('L20-6', 'figurative', 'Peacock spiders **have dancing down to an art**. This idiom means they…',
+      ['are very skilled at dancing', 'paint pictures while they dance', 'dance only in art class', 'are bad at dancing'],
+      'To have something "down to an art" means you do it with great skill.'),
+    mc('L20-7', 'figurative', '"A web is **a canvas**." What does this metaphor mean?',
+      ['Spiders make patterns and designs in their webs, like art', 'Webs are made of cloth', 'Spiders paint with brushes', 'Webs are always white'],
+      'A canvas is what an artist paints on. The spider "decorates" its web.'),
+    txt('L20-8', 'figurative', 'Write your **own simile** about a spider. Remember: a simile uses **like** or **as**.',
+      'A sentence that compares a spider (or its web, legs, speed…) to something else using "like" or "as", e.g. "The web sparkled like a necklace." Score 2 = correct simile with like/as and a clear comparison; 1 = uses like/as but comparison unclear OR is a metaphor; 0 = no comparison.')
+  ]
+},
+{
+  id: 'L21', week: 0, day: 0, icon: '🎁', title: 'Math Mix: Sharing and Building',
+  questions: [
+    num('L21-1', 'fractions', '7 snack packs are shared equally by **4** friends. How much does each friend get? (Write a fraction or mixed number)', ['1 3/4', '7/4', '1.75'],
+      '7 ÷ 4 = 7/4 = 1 3/4. Each friend gets one whole pack and 3/4 of another.'),
+    num('L21-2', 'fractions', '5 pies are shared equally by **6** people. What fraction of a pie does each person get?', ['5/6'],
+      '5 ÷ 6 = 5/6.'),
+    mc('L21-3', 'fractions', '2 friends share **1/4** of a pizza equally. What fraction of the **whole** pizza does each friend get?',
+      ['1/8', '1/2', '2/4', '1/6'],
+      '1/4 ÷ 2 = 1/8. Splitting a piece into 2 makes each part smaller.'),
+    num('L21-4', 'expressions', 'What is the value of **24 ÷ (12 − 6)**?', '4',
+      'Parentheses first: 12 − 6 = 6. Then 24 ÷ 6 = 4.'),
+    num('L21-5', 'expressions', 'What is the value of **30 − (4 + 2) × 3**?', '12',
+      'Parentheses: 4 + 2 = 6. Multiply: 6 × 3 = 18. Subtract: 30 − 18 = 12.'),
+    num('L21-6', 'volume', 'A gift box is 6 inches long, 3 inches wide, and 2 inches tall. What is its volume in cubic inches?', '36',
+      '6 × 3 × 2 = 36 cubic inches.', { figure: box(6, 3, 2, 'in') }),
+    num('L21-7', 'volume', 'Figure A and Figure B are joined. What is the **total** volume in cubic inches?', '280',
+      'A: 4 × 4 × 5 = 80. B: 10 × 4 × 5 = 200. Total: 80 + 200 = 280 cubic inches.', { figure: two(box(4, 4, 5), box(10, 4, 5), 'in') }),
+    txt('L21-8', 'fractions', 'Explain why **1/6 ÷ 3** gives a **smaller** number than 1/6.',
+      'Dividing 1/6 into 3 equal parts makes each part smaller (1/18): you are splitting a piece that is already small among more people. Score 2 = says the piece is split into 3 smaller parts + gives 1/18 or a clear example; 1 = says it gets smaller without explaining; 0 = incorrect.')
+  ]
+},
+{
+  id: 'L22', week: 0, day: 0, icon: '💧', title: 'Science Review: Matter Mission',
+  questions: [
+    sortQ('L22-1', 'science', 'Sort each thing into its **state of matter**.', ['🧊 Solid', '💧 Liquid', '💨 Gas'],
+      [['apple', 0], ['window', 0], ['ice cube', 0], ['milk', 1], ['juice', 1], ['glue', 1], ['steam', 2], ['oxygen', 2], ['helium in a balloon', 2]],
+      'Solids keep their shape. Liquids take the shape of their container. Gases spread out to fill it.'),
+    orderQ('L22-2', 'science', 'Put the changes in order, from **coldest** to **hottest**.',
+      ['Solid ice', 'Ice melts into liquid water', 'Water is heated and evaporates', 'Steam (a gas) rises into the air'],
+      'Adding heat gives the molecules more energy: solid → liquid → gas.'),
+    mc('L22-3', 'science', 'Which state of matter is **most similar to a liquid**, and why?',
+      ['A gas, because both can change shape and take the shape of their container', 'A solid, because both keep their own shape', 'A solid, because both are hard', 'A gas, because both are heavy'],
+      'Liquids and gases both flow and have no shape of their own.'),
+    mc('L22-4', 'science', 'How can matter change from a **liquid** to a **solid**?',
+      ['By cooling it until it freezes', 'By letting it dry in the sun', 'By heating it', 'By shaking it'],
+      'Cooling slows the molecules down until they lock in place, like water freezing into ice.'),
+    mc('L22-5', 'science', 'How can matter change from a **liquid** to a **gas**?',
+      ['By heating it so it evaporates', 'By freezing it', 'By pouring it into a cup', 'By cutting it'],
+      'Heat makes the molecules move so fast that they escape into the air.'),
+    mc('L22-6', 'science', 'Where can you find **matter**?',
+      ['Everywhere: anything you can touch, taste, smell or see is matter', 'Only in science labs', 'Only in solids', 'Only in the ocean'],
+      'Matter is all around us, even the air.'),
+    txt('L22-7', 'science', 'Explain why a **solid keeps its own shape** but a **liquid does not**. Use the word **molecules**.',
+      'Solid molecules are packed tightly and only vibrate in place, so the shape stays the same unless something (like cutting or melting) changes it; liquid molecules are a bit farther apart and slide past each other, so the liquid flows and takes the shape of its container. Score 2 = both parts with molecules; 1 = only one part or no molecules; 0 = incorrect.')
+  ]
+}
+);
+
 /* ========== PRACTICE POOL (extra practice when she misses a skill) ========== */
 window.POOL = {
   vocab: [

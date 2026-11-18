@@ -382,7 +382,7 @@
         <div class="absolute -right-10 -bottom-10 w-36 h-36 rounded-full bg-primary-fixed/20 pointer-events-none"></div>
         <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-fixed text-on-primary-fixed text-label-sm mb-3">${I('auto_stories', 'text-[16px]')} ${L('Próxima leitura', 'Up next')}</span>
         <div class="flex gap-3.5 items-center"><div class="w-20 h-24 rounded-xl bg-gradient-to-br from-primary-container to-primary flex-shrink-0 flex items-center justify-center text-on-primary shadow-sm text-4xl overflow-hidden">${next.image ? `<img class="w-full h-full object-cover" src="${esc(next.image)}">` : esc(next.icon || '📖')}</div>
-          <div class="flex-1 min-w-0"><h2 class="text-headline-md text-on-surface line-clamp-2">${esc(next.title)}</h2><p class="text-body-sm text-on-surface-variant mt-0.5">${next.pages.length} ${L('página(s)', 'page(s)')} · ${next.questions.length} ${L('perguntas', 'questions')}</p></div></div>
+          <div class="flex-1 min-w-0"><h2 class="text-headline-md text-on-surface line-clamp-2">${esc(next.title)}</h2><p class="text-body-sm text-on-surface-variant mt-0.5">${next.pages.length ? `${next.pages.length} ${L('página(s)', 'page(s)')} · ` : ''}${next.questions.length} ${L('perguntas', 'questions')}</p></div></div>
         <button id="ler" class="btn3d-sm w-full mt-4 h-12 rounded-xl bg-primary-container text-on-primary text-label-lg flex items-center justify-center gap-2"><span>${L('Começar a ler', 'Start reading')}</span>${I('arrow_forward', 'text-[20px]')}</button></div></section>` : ''}
       <section class="mt-7"><div class="flex items-end justify-between mb-3"><div><h2 class="text-headline-lg-mobile text-on-surface">${kt('minhasLeituras')}</h2><p class="text-body-sm text-on-surface-variant">${L('Leia de novo quando quiser', 'Read again anytime')}</p></div></div>
         ${reads.length ? `<div class="flex gap-4 overflow-x-auto no-scrollbar pb-2 -mx-margin px-margin md:mx-0 md:px-0 md:grid md:grid-cols-3 md:overflow-visible">${reads.map((r, i) => { const c = e.prog.completed[r.id] || {}; return `<div class="w-60 md:w-auto flex-shrink-0 bg-surface-container-lowest rounded-2xl p-3.5 shadow-sm flex flex-col justify-between">
@@ -723,9 +723,43 @@
     const w = $('#why'); if (w) w.onclick = () => { const open = $('#whyt').classList.toggle('hidden') === false; w.setAttribute('aria-expanded', open); $('#whyi').style.transform = open ? 'rotate(180deg)' : ''; };
     $('#ok').onclick = () => { stepSecs(); nextStep(); };
   }
+  /* desenho do prisma (caixa) para as perguntas de volume */
+  function boxSVG(bx, tag) {
+    const { l, w, h } = bx;
+    const s = Math.max(10, Math.min(36, 260 / (l + w * 0.6), 170 / (h + w * 0.35)));
+    const Lw = l * s, Hh = h * s, D = w * s * 0.6, dx = D * 0.866, dy = D * 0.5;
+    const padL = bx.labels ? 46 : 12, padT = 14 + (tag ? 20 : 0), x0 = padL, y0 = padT + dy + Hh;
+    const W = padL + Lw + dx + (bx.labels ? 70 : 14), Ht = y0 + (bx.labels ? 30 : 12);
+    const pt = q => q.map(v => v.toFixed(1)).join(',');
+    const ST = 'rgb(var(--c-primary))';
+    const poly = (pts, fill) => `<polygon points="${pts.map(pt).join(' ')}" fill="${fill}" stroke="${ST}" stroke-width="2" stroke-linejoin="round"/>`;
+    let g = '';
+    g += poly([[x0, y0], [x0 + Lw, y0], [x0 + Lw, y0 - Hh], [x0, y0 - Hh]], 'rgb(var(--c-primary-fixed))');
+    g += poly([[x0, y0 - Hh], [x0 + Lw, y0 - Hh], [x0 + Lw + dx, y0 - Hh - dy], [x0 + dx, y0 - Hh - dy]], 'rgb(var(--c-surface-container-high))');
+    g += poly([[x0 + Lw, y0], [x0 + Lw + dx, y0 - dy], [x0 + Lw + dx, y0 - Hh - dy], [x0 + Lw, y0 - Hh]], 'rgb(var(--c-primary-fixed-dim))');
+    if (bx.cubes) {
+      const ln = (p1, p2) => `<line x1="${p1[0].toFixed(1)}" y1="${p1[1].toFixed(1)}" x2="${p2[0].toFixed(1)}" y2="${p2[1].toFixed(1)}" stroke="${ST}" stroke-width="1" opacity=".55"/>`;
+      for (let i = 1; i < l; i++) { const x = x0 + i * s; g += ln([x, y0], [x, y0 - Hh]) + ln([x, y0 - Hh], [x + dx, y0 - Hh - dy]); }
+      for (let j = 1; j < h; j++) { const y = y0 - j * s; g += ln([x0, y], [x0 + Lw, y]) + ln([x0 + Lw, y], [x0 + Lw + dx, y - dy]); }
+      for (let k = 1; k < w; k++) { const ox = dx * k / w, oy = dy * k / w; g += ln([x0 + ox, y0 - Hh - oy], [x0 + Lw + ox, y0 - Hh - oy]) + ln([x0 + Lw + ox, y0 - oy], [x0 + Lw + ox, y0 - Hh - oy]); }
+    }
+    if (bx.labels) {
+      const u = bx.unit && bx.unit !== 'units' ? ' ' + esc(bx.unit) : '';
+      const t = (x, y, tx, anchor) => `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" font-size="15" font-weight="800" fill="rgb(var(--c-on-surface))" font-family="Nunito Sans, sans-serif">${tx}</text>`;
+      g += t(x0 + Lw / 2, y0 + 22, l + u, 'middle');
+      g += t(x0 - 8, y0 - Hh / 2 + 5, h + u, 'end');
+      g += t(x0 + Lw + dx / 2 + 8, y0 - dy / 2 + 14, w + u, 'start');
+    }
+    if (tag) g += `<text x="${(x0 + Lw / 2).toFixed(1)}" y="16" text-anchor="middle" font-size="16" font-weight="800" fill="rgb(var(--c-secondary))" font-family="Nunito Sans, sans-serif">${tag}</text>`;
+    return `<svg viewBox="0 0 ${W.toFixed(0)} ${Ht.toFixed(0)}" class="max-w-full h-auto" style="width:${Math.min(W, 380).toFixed(0)}px;max-height:${tag ? 150 : 200}px" role="img" aria-label="${l} × ${w} × ${h}">${g}</svg>`;
+  }
   function figure(f) {
-    if (f.kind === 'box') return `📦 ${f.labels ? `${f.l} × ${f.w} × ${f.h} ${esc(f.unit)}` : ''}`;
-    if (f.kind === 'two') return `📦 ${f.a.join(' × ')} + 📦 ${f.b.join(' × ')} ${esc(f.unit)}`;
+    if (!f) return '';
+    if (f.kind === 'box') return `<div class="flex justify-center bg-surface-container-low rounded-2xl p-3">${boxSVG(f)}</div>`;
+    if (f.kind === 'two') {
+      const a = Object.assign({}, f.a, f.unit ? { unit: f.unit } : {}), b = Object.assign({}, f.b, f.unit ? { unit: f.unit } : {});
+      return `<div class="flex flex-wrap items-center justify-center gap-2 bg-surface-container-low rounded-2xl p-3">${boxSVG(a, L('Figura A', 'Figure A'))}<span class="text-headline-lg text-primary">+</span>${boxSVG(b, L('Figura B', 'Figure B'))}</div>`;
+    }
     return '';
   }
 

@@ -73,5 +73,12 @@ window.WORDS = [
   W('ubiquitous', 4, 'found everywhere', 'everywhere', 'Phones are ___ today; almost everyone has one.'),
   W('venerable', 4, 'respected because of age, wisdom, or history', 'honored', 'The ___ old lighthouse had guided sailors for 200 years.'),
   W('zealous', 4, 'very enthusiastic and eager', 'eager', 'Noah was a ___ collector of facts about everything.'),
-  W('juxtapose', 4, 'to place two things side by side to compare them', 'contrast', 'The artist likes to ___ bright colors with dark ones.', ['pos', 'place'])
+  W('juxtapose', 4, 'to place two things side by side to compare them', 'contrast', 'The artist likes to ___ bright colors with dark ones.', ['pos', 'place']),
+  /* ---- from school worksheets (Nov 17) ---- */
+  W('monstrous', 2, 'huge and frightening', 'enormous', 'The ___ waves crashed over the rocks and made the raft shake.'),
+  W('momentum', 3, 'the force something has while it is moving', 'force', 'The sled picked up ___ as it raced down the steep hill.'),
+  W('pummel', 3, 'to hit again and again', 'pound', 'The storm began to ___ the roof with heavy hail.'),
+  W('frantic', 2, 'wild with worry or fear; very hurried', 'panicked', 'Dad made a ___ search for his keys when we were already late.'),
+  W('disguise', 1, 'something that hides who or what you really are', 'costume', 'The spider\'s ___ made it look just like a bird dropping on a leaf.'),
+  W('antennae', 2, 'the two thin feelers on an insect\'s head', 'feelers', 'The ant touched the crumb with its ___ before picking it up.')
 ];

@@ -71,7 +71,7 @@
     if (it.kind === 'story') return { id: it.id, kind: 'story', title: it.title, icon: it.icon, pages: it.pages, aloud: it.aloud || [], checks: it.checks || [], questions: it.questions || [] };
     if (it.kind === 'module') return { id: it.id, kind: 'module', title: it.title, icon: it.icon, pages: it.pages && it.pages[0] ? it.pages : [it.text || ''], audio: this.base(it.audio), image: this.base(it.image), aloud: [1], checks: it.checks || [], questions: it.questions || [] };
     if (it.kind === 'corner') return { id: it.id, kind: 'corner', title: it.title, icon: it.icon, pages: pagesOf(it.passage.text), aloud: [1], checks: [], questions: it.questions || [] };
-    return { id: it.id, kind: 'lesson', title: (it.passage && it.passage.title) || it.title, icon: it.icon, pages: pagesOf(it.passage && it.passage.text), aloud: [1], checks: [], questions: it.questions || [], wordParts: it.passage && it.passage.wordParts };
+    return { id: it.id, kind: 'lesson', title: (it.passage && it.passage.title) || it.title, icon: it.icon, pages: it.passage ? pagesOf(it.passage.text) : [], aloud: it.passage ? [1] : [], checks: [], questions: it.questions || [], wordParts: it.passage && it.passage.wordParts };
   };
   E.readingList = function () {
     const d = today(); const list = [];
@@ -183,7 +183,8 @@
     };
     if (S.reading) {
       S.reading.pages.forEach((p, i) => S.queue.push({ kind: 'page', n: i + 1 }));
-      const qs = S.reading.questions.filter(q => READ_SKILLS.includes(q.skill) || S.reading.kind === 'ai' && q.pilar === 'leitura');
+      // lição sem texto (só exercícios de matemática/ciências): todas as perguntas entram na sessão
+      const qs = !S.reading.pages.length ? S.reading.questions.slice() : S.reading.questions.filter(q => READ_SKILLS.includes(q.skill) || S.reading.kind === 'ai' && q.pilar === 'leitura');
       (S.reading.checks || []).forEach(q => { const after = Math.min(S.reading.pages.length, q.after || S.reading.pages.length); const i = S.queue.findIndex(x => x.kind === 'page' && x.n === after); S.queue.splice(i + 1, 0, { kind: 'q', qid: q.id, source: 'check' }); });
       qs.forEach(q => S.queue.push({ kind: 'q', qid: q.id, source: 'lesson' }));
       this.addWords(S.reading.pages, 'lesson');

@@ -842,7 +842,7 @@ window.POOL.money = [
 
 /* ---------- Quest plan: Mon story · Tue lesson · Wed story · Thu lesson · Fri story ---------- */
 (function () {
-  const FIRST = ['L01', 'L02', 'L16', 'L17', 'L18']; // newest school topics come early
+  const FIRST = ['L22', 'L19', 'L21', 'L20', 'L01', 'L02', 'L16', 'L17', 'L18']; // newest school topics come early
   const sk = FIRST.map(id => window.LESSONS.find(l => l.id === id)).filter(Boolean)
     .concat(window.LESSONS.filter(l => !FIRST.includes(l.id)));
   const ch = window.CHAPTERS.slice(), plan = [];
