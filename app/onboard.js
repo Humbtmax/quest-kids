@@ -9,6 +9,8 @@
   const app = () => $('#app');
   const TERMOS_V = '2026-11-17';
   const AVATARES = ['🦄', '🐱', '🐶', '🦊', '🐼', '🐯', '🐸', '🦁', '🐧', '🐙', '🦖', '🚀', '⚽', '🎨', '🌸', '⭐', '🌈', '🐬', '🦋', '🤖'];
+  const AVN = { '🦄': ['Unicórnio', 'Unicorn'], '🐱': ['Gatinho', 'Kitty'], '🐶': ['Cachorrinho', 'Puppy'], '🦊': ['Raposinha', 'Fox'], '🐼': ['Panda', 'Panda'], '🐯': ['Tigrinho', 'Tiger'], '🐸': ['Sapinho', 'Froggy'], '🦁': ['Leãozinho', 'Lion'], '🐧': ['Pinguim', 'Penguin'], '🐙': ['Polvinho', 'Octopus'], '🦖': ['Dino', 'Dino'], '🚀': ['Foguete', 'Rocket'], '⚽': ['Craque', 'Champ'], '🎨': ['Artista', 'Artist'], '🌸': ['Florzinha', 'Blossom'], '⭐': ['Estrela', 'Star'], '🌈': ['Arco-íris', 'Rainbow'], '🐬': ['Golfinho', 'Dolphin'], '🦋': ['Borboleta', 'Butterfly'], '🤖': ['Robô', 'Robot'] };
+  const avName = a => (AVN[a] || ['Explorador', 'Explorer'])[pt() ? 0 : 1];
   const MESES = () => pt() ? ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'] : ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   const DIAS = () => pt() ? ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'] : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const atividades = min => Math.min(40, Math.round(min * 0.6 + 4));
@@ -126,7 +128,7 @@
     const first = !!opts.first;
     const others = A().kids.slice();
     const d = { apelido: '', idade: null, mes_nasc: null, idioma_app: QK.lang === 'en' ? 'en' : 'pt-BR', avatar: AVATARES[others.length % AVATARES.length] || '🦄', foco: [], minutos: 15, dias: [1, 2, 3, 4, 5], pin: '' };
-    const steps = (first ? ['oi', 'termos'] : []).concat(['apelido', 'idade', 'mes', 'idioma', 'avatar', 'foco', 'meta', 'dias', 'pin', 'promessa'], first ? ['casa', 'planos'] : []);
+    const steps = (first ? ['oi', 'termos'] : []).concat(['apelido', 'idade', 'mes', 'idioma', 'foco', 'meta', 'dias', 'pin', 'promessa'], first ? ['casa', 'planos'] : []);
     const N = steps.length; let i = 0, saved = null;
     const go = k => { i = Math.max(0, Math.min(N - 1, k)); draw(); };
     const next = () => go(i + 1), prev = () => (i === 0 ? (first ? null : A().picker()) : go(i - 1));
@@ -136,7 +138,10 @@
     function draw() {
       const s = steps[i], bk = back(i), common = { step: i + 1, total: N, back: bk };
       if (s === 'oi') {
-        frame(Object.assign(common, { back: null, btn: tx('Começar', 'Start'), body: `<div class="text-center pt-6">${mascot(150)}<h1 class="text-headline-xl-mobile text-on-surface mt-4">${tx('Oi! Eu sou o Quico.', "Hi! I'm Quico.")}</h1><p class="text-body-lg text-on-surface-variant mt-2">${tx('Vou te ajudar a montar o estudo do seu filho em 1 minuto. São perguntas rápidas, uma por tela.', "I'll help you set up your child's study in 1 minute. Quick questions, one per screen.")}</p></div>` }));
+        frame(Object.assign(common, { back: null, btn: tx('Começar', 'Start'), foot: `<button id="tenho" class="w-full h-11 text-label-md text-primary">${tx('Recebi um convite de outro responsável', 'I got an invite from another parent')}</button>`, body: `<div class="text-center pt-6">${mascot(150)}<h1 class="text-headline-xl-mobile text-on-surface mt-4">${tx('Oi! Eu sou o Quico.', "Hi! I'm Quico.")}</h1><p class="text-body-lg text-on-surface-variant mt-2">${tx('Vou te ajudar a montar o estudo do seu filho em 1 minuto. São perguntas rápidas, uma por tela.', "I'll help you set up your child's study in 1 minute. Quick questions, one per screen.")}</p></div>
+          <div id="cv" class="hidden mt-6 bg-surface-container-low rounded-2xl p-4 space-y-2"><p class="text-body-md text-on-surface">${tx('Digite o código que você recebeu:', 'Type the code you received:')}</p><div class="flex gap-2"><input id="cod" class="${inputCls} !h-12 !text-label-lg uppercase tracking-widest" maxlength="8" autocapitalize="characters" autocomplete="off"><button id="acc" class="h-12 px-5 rounded-xl bg-primary-container text-on-primary text-label-lg">OK</button></div></div>` }));
+        $('#tenho').onclick = () => { $('#cv').classList.remove('hidden'); $('#cod').focus(); };
+        $('#acc').onclick = async () => { const c = $('#cod').value.trim(); if (!c) return; try { await DB.rpc('aceitar_convite', { cod: c }); toast('✅ ' + tx('Você entrou na família!', 'You joined the family!')); await A().loadFamily(); A().picker(); } catch (x) { toast(A().inviteErr(x), 4500); } };
         return ($('#nx').onclick = next);
       }
       if (s === 'termos') {
@@ -145,13 +150,22 @@
         return ($('#nx').onclick = async () => { $('#nx').disabled = true; await aceitar(); next(); });
       }
       if (s === 'apelido') {
-        frame(Object.assign(common, { inlineBtn: true, btn: tx('Continuar', 'Continue'), btnOff: !d.apelido.trim(), body: `${bubble(first ? tx('Como a criança gosta de ser chamada?', 'What does your child like to be called?') : tx('Que legal, mais uma criança! Como ela gosta de ser chamada?', 'Great, one more kid! What do they like to be called?'))}
-          <input id="ap" class="${inputCls}" maxlength="20" autocomplete="off" autocapitalize="words" value="${esc(d.apelido)}" placeholder="${tx('Ex.: Bia', 'E.g. Bea')}">
-          <p class="text-body-sm text-on-surface-variant mt-3 flex gap-2 justify-center">${I('shield', 'text-[18px] text-primary')} ${tx('Só o apelido. Nunca o nome completo.', 'Nickname only. Never the full name.')}</p>
+        frame(Object.assign(common, { inlineBtn: true, btn: tx('Continuar', 'Continue'), body: `${bubble(first ? tx('Como vamos chamar a criança no app?', 'What should we call your child in the app?') : tx('Que legal, mais uma criança! Como vamos chamar no app?', 'Great, one more kid! What should we call them?'))}
+          <div class="text-center mb-3"><span class="inline-flex w-20 h-20 rounded-full bg-primary-fixed/60 items-center justify-center text-[46px]">${d.avatar}</span></div>
+          <p class="text-label-md text-on-surface mb-2">${tx('1. Escolha um avatar', '1. Pick an avatar')}</p>
+          <div class="grid grid-cols-5 gap-2 mb-4">${AVATARES.map(a => `<button data-av="${a}" class="h-12 rounded-2xl text-[26px] border-2 ${d.avatar === a ? 'border-primary-container bg-primary-fixed/30' : 'border-transparent bg-surface-container-low'}">${a}</button>`).join('')}</div>
+          <p class="text-label-md text-on-surface mb-2">${tx('2. Apelido (opcional)', '2. Nickname (optional)')}</p>
+          <input id="ap" class="${inputCls} !h-14 !text-headline-md" maxlength="20" autocomplete="off" autocapitalize="words" value="${esc(d.apelido)}" placeholder="${tx('Ex.: Bia — ou deixe em branco', 'E.g. Bea — or leave blank')}">
+          <p class="text-body-sm text-on-surface-variant mt-3 flex gap-2 justify-center text-center">${I('shield', 'text-[18px] text-primary shrink-0')} ${tx('Pode ser só o avatar ou só um apelido. Nunca o nome completo.', 'Just the avatar or a nickname is enough. Never the full name.')}</p>
           ${!first ? `<p class="text-body-sm text-on-surface-variant mt-2 text-center">${tx('Adicionar crianças é grátis (até 3 por conta).', 'Adding kids is free (up to 3 per account).')}</p>` : ''}` }));
-        const ap = $('#ap'); ap.oninput = () => { d.apelido = ap.value; $('#nx').disabled = !ap.value.trim(); };
-        ap.onkeydown = e => { if (e.key === 'Enter' && ap.value.trim()) $('#nx').click(); };
-        return ($('#nx').onclick = () => { d.apelido = ap.value.trim().slice(0, 20); if (others.some(k => k.apelido.toLowerCase() === d.apelido.toLowerCase())) return toast(tx('Já existe uma criança com esse apelido.', 'There is already a child with that nickname.')); next(); });
+        const ap = $('#ap'); ap.oninput = () => { d.apelido = ap.value; };
+        ap.onkeydown = e => { if (e.key === 'Enter') $('#nx').click(); };
+        app().querySelectorAll('[data-av]').forEach(b => b.onclick = () => { d.apelido = ap.value; d.avatar = b.dataset.av; draw(); });
+        return ($('#nx').onclick = () => {
+          d.apelido = ap.value.trim().slice(0, 20) || avName(d.avatar);
+          if (others.some(k => k.apelido.toLowerCase() === d.apelido.toLowerCase())) { if (!ap.value.trim()) d.apelido += ' ' + (others.length + 1); else return toast(tx('Já existe uma criança com esse apelido.', 'There is already a child with that nickname.')); }
+          next();
+        });
       }
       if (s === 'idade') {
         frame(Object.assign(common, { btn: tx('Continuar', 'Continue'), btnOff: !d.idade, body: `${bubble(tx(`Quantos anos ${nome()} tem?`, `How old is ${nome()}?`))}

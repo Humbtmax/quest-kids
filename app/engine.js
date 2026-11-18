@@ -47,7 +47,8 @@
       (window.CORNERS || []).forEach(c => { add(c.questions); words(c.passage && c.passage.text); });
       (window.WORDS || []).forEach(w => { defs[w.w.toLowerCase()] = defs[w.w.toLowerCase()] || w.def; });
     }
-    this.licoes.forEach(l => { add(l.questions); (l.pages || [l.passage && l.passage.text]).forEach(words); (l.palavras || []).forEach(w => defs[String(w.w).toLowerCase()] = w.def); });
+    this.defAlts = {};
+    this.licoes.forEach(l => { Object.entries(l.defs_alt || {}).forEach(([w, arr]) => { this.defAlts[String(w).toLowerCase()] = [].concat(arr || []); }); add(l.questions); (l.pages || [l.passage && l.passage.text]).forEach(words); (l.palavras || []).forEach(w => defs[String(w.w).toLowerCase()] = w.def); });
     Object.entries(this.prog.wordbank).forEach(([w, x]) => { if (x && x.def) defs[w.toLowerCase()] = defs[w.toLowerCase()] || x.def; });
   };
 
@@ -56,8 +57,41 @@
     if (this.Q[qid]) return this.Q[qid];
     if (qid.startsWith('G:') && window.QGEN) { const q = window.QGEN.genFromId(qid); if (q) return (this.Q[qid] = q); }
     if (qid.startsWith('WB:')) return this.wordQ(qid.slice(3));
+    if (qid.startsWith('TV:')) { NUMLOC = this.child && this.child.idioma_app === 'en' ? 'en-US' : 'pt-BR'; const [, base, seed] = qid.split(':'); const q = this.Q[base]; const v = q && instantiate(q, +seed); if (v) return (this.Q[qid] = v); }
     return null;
   };
+
+  /* ---------- variações automáticas de perguntas com números ----------
+     A IA manda um "modelo": vars {"R":[2000,6000,250]} (mín, máx, passo) e textos com {R} e {=R-G}.
+     Cada vez o app sorteia números novos e recalcula a resposta. */
+  function rng(seed) { let x = (seed >>> 0) || 1; return () => { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return ((x >>> 0) % 100000) / 100000; }; }
+  function calc(expr, v) {
+    const e = String(expr).replace(/[A-Z]\w*/g, k => (k in v ? '(' + v[k] + ')' : 'NaN'));
+    if (!/^[\d+\-*/().\s<>=!&|%]+$/.test(e)) return NaN;
+    try { return Function('"use strict";return (' + e + ')')(); } catch (x) { return NaN; }
+  }
+  let NUMLOC = 'pt-BR';
+  const fmtN = n => (Math.round(n * 100) / 100).toLocaleString(NUMLOC, { maximumFractionDigits: 2 });
+  function instantiate(q, seed) {
+    if (!q || !q.vars) return null;
+    const r = rng(seed), v = {};
+    for (const k in q.vars) { const [a, b, st] = q.vars[k]; const step = st || 1, n = Math.floor((b - a) / step) + 1; v[k] = a + step * Math.floor(r() * Math.max(1, n)); }
+    if (q.cond && !calc(q.cond, v)) { const tries = (q._t = (q._t || 0) + 1); if (tries > 40) { q._t = 0; return null; } return instantiate(q, (seed * 7 + 13) % 2147483647); }
+    q._t = 0;
+    const fill = t => String(t).replace(/\{=([^}]+)\}/g, (_, ex) => fmtN(calc(ex, v))).replace(/\{([A-Z]\w*)\}/g, (_, k) => k in v ? fmtN(v[k]) : _);
+    const out = JSON.parse(JSON.stringify(q)); out.id = 'TV:' + q.id + ':' + seed; out.base = q.id;
+    out.prompt = fill(q.prompt); if (q.explain) out.explain = fill(q.explain); if (q.hint) out.hint = fill(q.hint);
+    if (q.options) out.options = q.options.map(fill);
+    if (q.answers) out.answers = q.answers.map(a => fill(a)).concat(q.answers.map(a => fill(a).replace(NUMLOC === 'en-US' ? /,/g : /\./g, '').replace(',', '.')));
+    delete out.vars; return out;
+  }
+  E.variant = function (q) {
+    const base = q.base ? this.Q[q.base] : q;
+    if (base && base.vars) { const id = 'TV:' + base.id + ':' + (Date.now() % 1e8 + Math.floor(Math.random() * 1e4)); if (this.question(id)) return id; }
+    return null;
+  };
+  // quantas vezes cada pergunta já apareceu (para não repetir demais)
+  E.timesSeen = function (id) { const c = this.prog.qn || {}; return c[(this.Q[id] && this.Q[id].base) || id] || 0; };
 
   /* ---------- leituras ---------- */
   function pagesOf(text, max) {
@@ -126,7 +160,10 @@
     skills = skills.concat(all.filter(s => !skills.includes(s)));
     const aiQs = this.licoes.flatMap(l => (l.questions || []).filter(q => !READ_SKILLS.includes(q.skill)));
     const k = (this.prog.counts.practice = (this.prog.counts.practice || 0) + 1);
-    if (aiQs.length && k % 2) { const q = aiQs.find(q => !avoid.includes(q.id) && !(this.prog.seen[q.id] > today())) || null; if (q) return q.id; }
+    if (aiQs.length && k % 2) {
+      const fresh = aiQs.filter(q => !avoid.includes(q.id) && !avoid.some(a => a.startsWith('TV:' + q.id + ':')));
+      if (fresh.length) { const m = Math.min(...fresh.map(q => this.timesSeen(q.id))); const q = shuffle(fresh.filter(q => this.timesSeen(q.id) === m))[0]; return (q.vars && this.timesSeen(q.id) > 0 && this.variant(q)) || q.id; }
+    }
     for (let i = 0; i < skills.length; i++) {
       const s = skills[(i + k) % skills.length];
       if (window.QGEN && window.QGEN.MATH_SKILLS.includes(s) && Math.random() < 0.6) return window.QGEN.mathFor(s, s + Date.now() + Math.random(), (this.prog.skills[s] || {}).run > 3);
@@ -137,7 +174,11 @@
     return rest.length ? shuffle(rest)[0].id : null;
   };
   E.similar = function (q) {
+    const vid = this.variant(q); if (vid) return vid;
     if (window.QGEN && window.QGEN.similarMath) { const id = window.QGEN.similarMath(q); if (id) return id; }
+    // outra pergunta da mesma matéria feita pela IA (a que apareceu menos vezes)
+    const ai = this.licoes.flatMap(l => l.questions || []).filter(x => x.id !== (q.base || q.id) && x.skill === q.skill && !READ_SKILLS.includes(x.skill) && !(this.s && this.s.used.includes(x.id)));
+    if (ai.length) { const m = Math.min(...ai.map(x => this.timesSeen(x.id))); const pick = shuffle(ai.filter(x => this.timesSeen(x.id) === m))[0]; return pick.vars ? this.variant(pick) || pick.id : pick.id; }
     const pool = (window.POOL || {})[q.skill] || [];
     const alt = shuffle(pool.filter(x => x.id !== q.id && !(this.prog.seen[x.id] > today())))[0];
     if (alt) return alt.id;
@@ -221,10 +262,12 @@
     if (S.station === 'reforco') {
       const d = today();
       const r = this.prog.review.find(x => x.due <= d && !S.used.includes(x.qid) && this.question(x.qid));
-      if (r) { S.queue.push({ kind: 'q', qid: r.qid, source: 'review' }); return true; }
+      if (r) { const base = this.question(r.qid); S.used.push(r.qid); S.queue.push({ kind: 'q', qid: (base && base.vars && this.variant(base)) || r.qid, source: 'review' }); return true; }
       if (S.reading) {
-        const q = S.reading.questions.find(q => !READ_SKILLS.includes(q.skill) && !S.used.includes(q.id) && !(S.reading.kind === 'ai' && q.pilar === 'leitura'));
-        if (q) { S.queue.push({ kind: 'q', qid: q.id, source: 'lesson' }); return true; }
+        const cand = S.reading.questions.filter(q => !READ_SKILLS.includes(q.skill) && !S.used.includes(q.id) && !(S.reading.kind === 'ai' && q.pilar === 'leitura'));
+        // perguntas que ela já viu 2+ vezes ficam para depois (ou voltam com números novos)
+        const q = cand.find(q => this.timesSeen(q.id) < 2) || (S.reading.kind === 'ai' ? cand.find(q => q.vars) : cand[0]);
+        if (q) { S.used.push(q.id); S.queue.push({ kind: 'q', qid: (q.vars && this.timesSeen(q.id) > 0 && this.variant(q)) || q.id, source: 'lesson' }); return true; }
       }
       const id = this.practiceQ(S.used);
       if (id && this.question(id)) { S.queue.push({ kind: 'q', qid: id, source: 'extra' }); return true; }
@@ -281,11 +324,13 @@
     S.items.push(item); S.earned += coins;
     const day = this.prog.dias[today()]; if (day) { day.q++; if (ok) day.ok++; }
     if (q.skill) { const sk = this.prog.skills[q.skill] = this.prog.skills[q.skill] || { run: 0, right: 0, wrong: 0 }; if (ok) { sk.right++; sk.run++; } else if (ok === false) { sk.wrong++; sk.run = 0; } sk.struggling = sk.wrong > 2 && sk.wrong > sk.right / 2; }
-    this.prog.seen[q.id] = addDays(today(), 3);
+    this.prog.seen[q.base || q.id] = addDays(today(), 3);
+    const qn = this.prog.qn = this.prog.qn || {}; qn[q.base || q.id] = (qn[q.base || q.id] || 0) + 1;
     if (q.id.startsWith('WB:')) this.gradeWord(q.id.slice(3), ok);
     else if (q.id.startsWith('G:word:') && ok) { const w = q.id.slice(7); const W = (window.WORDS || []).find(x => x.w === w); this.prog.wordbank[w.toLowerCase()] = this.prog.wordbank[w.toLowerCase()] || { box: 2, due: addDays(today(), 2), how: 'wordhunt', added: today(), right: 1, wrong: 0, def: W && W.def }; }
-    if (ok === false) { this.prog.review = this.prog.review.filter(r => r.qid !== q.id); this.prog.review.push({ due: addDays(today(), 1), qid: q.id }); }
-    if (ok && step.source === 'review') this.prog.review = this.prog.review.filter(r => r.qid !== q.id);
+    const rid = q.base || q.id;
+    if (ok === false) { this.prog.review = this.prog.review.filter(r => r.qid !== rid); if ((qn[rid] || 0) < 6) this.prog.review.push({ due: addDays(today(), 1), qid: rid }); }
+    if (ok && step.source === 'review') this.prog.review = this.prog.review.filter(r => r.qid !== rid);
     return { ok, coins };
   };
   E.recordMatch = function (step, mistakes) {

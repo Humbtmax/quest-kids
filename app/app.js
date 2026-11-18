@@ -4,7 +4,7 @@
   const { t, $, esc, md, today, addDays, shuffle, toast, Auth, DB, C } = QK;
   const A = window.QKApp = { fam: null, sub: null, kids: [], kid: null, eng: null };
   const app = () => $('#app');
-  const view = html => { app().innerHTML = html; window.scrollTo(0, 0); };
+  const view = (html, keep) => { const y = window.scrollY; app().innerHTML = html; window.scrollTo(0, keep ? y : 0); };
   const isPt = () => !(A.kid && A.kid.idioma_app === 'en');
   const kt = k => t(k, isPt() ? 'pt' : 'en');
   const L = (pt, en) => isPt() ? pt : en;                 // textos no idioma da criança
@@ -103,7 +103,13 @@
     const uidv = Auth.user && Auth.user.id;
     const mem = await DB.sel('membros', { eq: { user_id: uidv } });
     if (!mem.length) throw new Error(P('Sua conta ainda não tem família. Saia e entre de novo; se continuar, fale com o suporte.', 'Your account has no family yet. Sign out and in again.'));
-    const m = mem.find(x => x.papel === 'dono') || mem[0];
+    let m = mem.find(x => x.papel === 'dono') || mem[0];
+    if (mem.length > 1) {
+      // em mais de uma família (ex.: aceitou convite): usa a que tem crianças, de preferência a do convite
+      const cs = await DB.sel('criancas', { inn: { familia_id: mem.map(x => x.familia_id) } }).catch(() => []);
+      const comKids = mem.filter(x => cs.some(c => c.familia_id === x.familia_id && !c.arquivada));
+      if (comKids.length) m = comKids.find(x => x.papel !== 'dono') || comKids[0];
+    }
     A.fam = { id: m.familia_id, papel: m.papel };
     const [subs, kids] = await Promise.all([DB.sel('assinaturas', { eq: { familia_id: A.fam.id } }), DB.sel('criancas', { eq: { familia_id: A.fam.id }, order: 'criado_em.asc' })]);
     A.sub = subs[0] || { plano: 'teste', status: 'trialing' };
@@ -111,6 +117,8 @@
     A.kids = kids.filter(k => !k.arquivada);
   }
   A.loadFamily = loadFamily;
+  function inviteErr(x) { const m = String((x && x.message) || x); return /inválido|vencido|invalid|expired/i.test(m) ? P('Esse código não vale mais (vence em 3 dias) ou foi digitado errado. Peça um convite novo.', 'This code is no longer valid (3 days) or was mistyped. Ask for a new invite.') : /demo/i.test(m) ? P('No modo demonstração não há convites. Toque em "Sair da demo".', 'No invites in demo mode. Tap "Exit demo".') : m; }
+  A.inviteErr = inviteErr;
   A.planOk = () => {
     const s = A.sub || {}; if (s.plano === 'cortesia') return true;
     if (!['active', 'trialing', 'past_due'].includes(s.status)) return false;
@@ -123,10 +131,14 @@
     try {
       const r = await Auth.handleRedirect();
       if (r === 'recovery') return authScreen('nova');
-      if (/[?&]convite=/.test(location.search) && !Auth.logged) sessionStorage.setItem('qk.convite', new URLSearchParams(location.search).get('convite'));
-      if (!Auth.logged) return authScreen(/[?&]criar/.test(location.search) || sessionStorage.getItem('qk.convite') ? 'criar' : 'entrar');
-      const conv = sessionStorage.getItem('qk.convite') || new URLSearchParams(location.search).get('convite');
-      if (conv) { sessionStorage.removeItem('qk.convite'); try { await DB.rpc('aceitar_convite', { cod: conv }); toast('✅ ' + P('Convite aceito', 'Invite accepted')); } catch (x) { toast(x.message); } }
+      // convite: guarda o código mesmo se a pessoa precisar confirmar o e-mail em outra aba
+      const qconv = new URLSearchParams(location.search).get('convite');
+      if (qconv) { try { localStorage.setItem('qk.convite', qconv.trim().toUpperCase()); } catch (e) {} }
+      const savedConv = (() => { try { return localStorage.getItem('qk.convite'); } catch (e) { return null; } })();
+      if (!Auth.logged) return authScreen(/[?&]criar/.test(location.search) || savedConv ? 'criar' : 'entrar');
+      if (savedConv && !QK.DEMO) { try { localStorage.removeItem('qk.convite'); } catch (e) {} try { await DB.rpc('aceitar_convite', { cod: savedConv }); toast('✅ ' + P('Convite aceito! Você entrou na família.', 'Invite accepted! You joined the family.'), 4000); } catch (x) { toast(inviteErr(x), 5000); } }
+      // convite por e-mail: se alguém convidou este e-mail, entra sozinho na família
+      if (!QK.DEMO) await DB.rpc('aceitar_convite_email').then(f => { if (f) toast('✅ ' + P('Você entrou na família que te convidou!', 'You joined the family that invited you!'), 4000); }).catch(() => {});
       await loadFamily();
       if (/[?&]pago=1/.test(location.search)) { toast(P('🎉 Assinatura confirmada! Obrigado.', '🎉 Subscription confirmed! Thank you.'), 4000); history.replaceState(null, '', location.pathname); }
       if (!A.kids.length) return QKOnboard.start({ first: true });
@@ -171,6 +183,13 @@
   // modo demonstração: aviso claro + botão para voltar à conta de verdade
   function demoBar() { return `<div class="mb-5 bg-secondary-fixed text-on-secondary-fixed rounded-2xl p-3.5 flex items-center gap-3"><span class="text-[22px]">🧪</span><span class="text-label-md flex-1">${P('Modo demonstração: nada aqui vai para a sua conta de verdade.', 'Demo mode: nothing here goes to your real account.')}</span><a href="./?demo=0" class="shrink-0 px-3 h-10 inline-flex items-center rounded-full bg-on-secondary-fixed text-secondary-fixed text-label-md">${P('Sair da demo', 'Exit demo')}</a></div>`; }
   A.demoBar = demoBar;
+  // interruptor claro/escuro visível (☀️ —● 🌙)
+  function themeSwitch(id, dark) {
+    return `<button id="${id}" role="switch" aria-checked="${dark}" aria-label="${P('Modo escuro', 'Dark mode')}" class="relative w-[58px] h-8 rounded-full shrink-0 border border-outline-variant ${dark ? 'bg-inverse-surface/40' : 'bg-secondary-fixed/60'} transition-colors">
+      <span class="absolute left-1.5 top-1/2 -translate-y-1/2 text-[13px] leading-none ${dark ? 'opacity-40' : ''}">☀️</span><span class="absolute right-1.5 top-1/2 -translate-y-1/2 text-[13px] leading-none ${dark ? '' : 'opacity-40'}">🌙</span>
+      <span class="absolute top-[3px] ${dark ? 'left-[29px]' : 'left-[3px]'} w-6 h-6 rounded-full bg-surface-container-lowest shadow transition-all"></span></button>`;
+  }
+  A.themeSwitch = themeSwitch;
 
   /* ---------- atalho 🔒 da criança direto para a senha dos pais ---------- */
   function toParents(resume) {
@@ -296,12 +315,12 @@
     const p = A.eng.prog;
     return `<header class="fixed top-0 inset-x-0 z-40 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
       <div class="h-16 px-margin md:px-margin-tablet max-w-5xl mx-auto flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2 min-w-0">${logo}<span class="text-headline-md text-on-surface hidden sm:inline">Quest Kids</span><span class="text-label-md text-on-surface-variant truncate">${label}</span></div>
+        <div class="flex items-center gap-2 min-w-0">${logo}<span class="text-headline-md text-on-surface hidden sm:inline">Quest Kids</span><span class="text-label-md text-on-surface-variant truncate hidden sm:inline">${label}</span></div>
         <div class="flex items-center gap-2">
-          <span class="flex items-center gap-1 bg-secondary-container/20 px-2.5 py-1 rounded-full">${I('local_fire_department', 'text-secondary text-[18px]', 1)}<span class="text-label-sm text-on-secondary-container">${p.streak || 0}</span></span>
+          <span class="flex items-center gap-1 bg-secondary-container/20 px-2.5 py-1 rounded-full">${I('local_fire_department', 'text-secondary text-[18px]', 1)}<span class="text-label-sm text-on-surface font-extrabold">${p.streak || 0}</span></span>
           <span class="flex items-center gap-1 bg-surface-container-high px-2.5 py-1 rounded-full">${I('monetization_on', 'text-secondary text-[18px]', 1)}<span class="text-label-sm text-on-surface">${p.points || 0}</span></span>
           <button id="lk" title="${L('Área dos pais', 'Parents area')}" aria-label="${L('Área dos pais', 'Parents area')}" class="w-8 h-8 rounded-full flex items-center justify-center text-outline opacity-70">${I('lock', 'text-[18px]')}</button>
-          <button id="tm" title="${A.kid.tema === 'escuro' ? kt('claro') : kt('escuro')}" class="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center text-on-surface shadow-sm">${I(A.kid.tema === 'escuro' ? 'light_mode' : 'dark_mode', 'text-[20px]', 1)}</button>
+          ${themeSwitch('tm', A.kid.tema === 'escuro')}
           <button id="sw" title="${kt('trocar')}" class="w-9 h-9 rounded-full bg-primary-fixed/60 flex items-center justify-center text-[20px] shadow-sm">${esc(A.kid.avatar || '⭐')}</button>
         </div></div></header>`;
   }
@@ -326,13 +345,14 @@
   const pageMain = inner => `<main class="pt-20 pb-32 md:pb-36 px-margin md:px-margin-tablet max-w-5xl mx-auto">${inner}</main>`;
 
   /* ---------- Hoje ---------- */
+  const dayStamp = () => { const d = new Date(); return d.toLocaleDateString(isPt() ? 'pt-BR' : 'en-US', { weekday: 'long', day: '2-digit', month: '2-digit' }) + ' · ' + d.toLocaleTimeString(isPt() ? 'pt-BR' : 'en-US', { hour: '2-digit', minute: '2-digit' }); };
   function kidHome() {
     const e = A.eng, p = e.prog, goal = e.goalMin(), mins = e.minutesToday(), pct = e.dayPct(), stepsN = e.stepsToday(), stepsG = e.goalSteps();
     const next = e.nextReading(); const done = e.goalDone();
     const PP = Object.assign({ leitura: 40, palavras: 25, reforco: 35 }, A.kid.pilares || {}); const tot = PP.leitura + PP.palavras + PP.reforco || 100;
     const day = p.dias[today()] || {}; const pil = day.pil || {};
     const pm = k => Math.max(1, Math.round(goal * PP[k] / tot));
-    const pmin = k => Math.min(pm(k), Math.round((pil[k] || 0) / 60));
+    const pmin = k => Math.min(pm(k), (pil[k] || 0) > 0 ? Math.max(1, Math.round((pil[k] || 0) / 60)) : 0);
     const pp = k => Math.min(100, Math.round(100 * (pil[k] || 0) / Math.max(60, pm(k) * 60)));
     const canPlay = A.planOk();
     const hasAny = next || Object.keys(p.wordbank).length || e.pack || e.licoes.length;
@@ -350,19 +370,20 @@
         </div>
         <div><h1 class="text-headline-xl-mobile md:text-headline-xl text-on-surface tracking-tight">${kt('ola')}, ${esc(A.kid.apelido)}! 👋</h1>
         <p class="text-body-md text-on-surface-variant">${kt('prontaMissao')}</p></div></div>`;
-    const ring = `<div class="relative w-full bg-surface-container-lowest rounded-3xl p-6 soft-shadow flex flex-col items-center justify-center overflow-hidden">
+    const extra = Math.max(0, mins - goal);
+    const ring = `<div class="relative w-full bg-surface-container-lowest rounded-3xl p-5 soft-shadow flex flex-col items-center justify-center overflow-hidden">
         <div class="absolute -top-10 -right-10 w-32 h-32 bg-primary-container/10 rounded-full blur-2xl pointer-events-none"></div>
-        <div class="absolute -bottom-8 -left-8 w-28 h-28 bg-secondary-container/15 rounded-full blur-xl pointer-events-none"></div>
-        <div class="relative w-52 h-52 md:w-60 md:h-60 flex items-center justify-center my-2">
-          <svg class="w-full h-full -rotate-90" viewBox="0 0 160 160"><circle class="text-surface-container-high" cx="80" cy="80" r="66" fill="transparent" stroke="currentColor" stroke-width="12"></circle>
-          <circle class="text-primary-container transition-all duration-700" cx="80" cy="80" r="66" fill="transparent" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C2}" stroke-dashoffset="${(C2 * (1 - Math.max(0.03, pct))).toFixed(1)}"></circle></svg>
-          <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
-            <div class="w-10 h-10 rounded-full bg-primary-container/15 flex items-center justify-center mb-1 text-primary-container">${I(done ? 'celebration' : 'school', 'text-[24px]')}</div>
-            <span class="text-headline-md text-on-surface">${kt('licaoHoje')}</span>
-            <span class="text-label-lg text-primary mt-0.5">${Math.min(stepsN, stepsG)} ${kt('de')} ${stepsG} ${L('atividades', 'activities')}</span>
-            <span class="text-label-sm text-on-surface-variant mt-1">${done ? kt('metaFeita') : mins ? L('Continue de onde parou!', 'Pick up where you left off!') : L('Falta pouco para começar!', 'Ready when you are!')}</span>
+        <div class="relative flex items-center gap-2 text-on-surface">${I(done ? 'celebration' : 'school', 'text-[22px] text-primary', 1)}<span class="text-headline-md">${kt('licaoHoje')}</span></div>
+        <div class="relative w-56 h-56 md:w-60 md:h-60 flex items-center justify-center my-1">
+          <svg class="w-full h-full -rotate-90" viewBox="0 0 160 160"><circle class="text-surface-container-high" cx="80" cy="80" r="70" fill="transparent" stroke="currentColor" stroke-width="10"></circle>
+          <circle class="text-primary-container transition-all duration-700" cx="80" cy="80" r="70" fill="transparent" stroke="currentColor" stroke-width="10" stroke-linecap="round" stroke-dasharray="439.8" stroke-dashoffset="${(439.8 * (1 - Math.max(0.03, pct))).toFixed(1)}"></circle></svg>
+          <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-10">
+            ${done ? `<span class="done-stamp">${L('FEITO', 'DONE')} ✅</span><span class="text-label-sm text-on-surface-variant mt-2">${dayStamp()}</span>`
+              : `<span class="text-[44px] leading-none font-black text-on-surface">${Math.min(stepsN, stepsG)}<span class="text-[24px] text-on-surface-variant font-extrabold">/${stepsG}</span></span>
+            <span class="text-label-md text-primary mt-1">${L('atividades', 'activities')}</span>
+            <span class="text-label-sm text-on-surface-variant mt-1 leading-tight">${mins ? L('Continue de onde parou!', 'Pick up where you left off!') : L('Vamos começar?', 'Ready to start?')}</span>`}
           </div></div>
-        <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 bg-surface-container-low rounded-full">${I('timer', 'text-[16px] text-primary')}<span class="text-label-sm text-on-surface-variant">${L('Hoje', 'Today')}: ${mins} min · ${L('meta', 'goal')} ~${goal} min</span></div></div>`;
+        <div class="inline-flex items-center gap-1.5 px-3 py-1 bg-surface-container-low rounded-full">${I('timer', 'text-[16px] text-primary')}<span class="text-label-sm text-on-surface">${L('Hoje', 'Today')}: ${mins} min · ${L('meta', 'goal')} ${goal} min${extra ? ` · <b class="text-primary">+${extra} min ${L('extra', 'extra')} ⭐</b>` : ''}</span></div></div>`;
     const adv = next ? `<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex items-center gap-3">
         <div class="w-14 h-14 rounded-xl bg-secondary-fixed/60 overflow-hidden shrink-0 flex items-center justify-center text-3xl">${next.image ? `<img class="w-full h-full object-cover" src="${esc(next.image)}" alt="">` : esc(next.icon || '📖')}</div>
         <div class="flex-1 min-w-0"><div class="flex items-center gap-1.5">${I('stars', 'text-secondary text-[16px]', 1)}<span class="text-label-sm text-secondary uppercase tracking-wider">${L('Aventura do dia', "Today's adventure")}</span></div>
@@ -379,7 +400,7 @@
           <div class="grid grid-cols-3 gap-2.5">${pillar('leitura', 'menu_book', 'bg-tertiary-container/15', 'text-tertiary', 'bg-tertiary-container')}${pillar('palavras', 'spellcheck', 'bg-secondary-container/20', 'text-secondary', 'bg-secondary-container')}${pillar('reforco', 'auto_stories', 'bg-primary-container/15', 'text-primary', 'bg-primary-container')}</div>
           ${adv}
           <div class="pt-1 space-y-3">${cta}
-            <div class="flex items-center justify-center gap-1.5 text-center px-4 py-1"><span class="text-body-sm text-on-surface-variant">${L(`Complete hoje para manter sua sequência de <strong class="text-on-surface">${p.streak || 0} dias</strong>!`, `Finish today to keep your <strong class="text-on-surface">${p.streak || 0}-day</strong> streak!`)}</span><span>🌟</span></div>
+            <div class="flex items-center justify-center gap-1.5 text-center px-4 py-1"><span class="text-body-sm text-on-surface-variant">${done ? L(`Sequência de <strong class="text-on-surface">${p.streak || 0} ${(p.streak || 0) === 1 ? 'dia' : 'dias'}</strong>! Volte amanhã 🔥`, `<strong class="text-on-surface">${p.streak || 0}-day</strong> streak! Come back tomorrow 🔥`) : L(`Complete hoje para manter sua sequência de <strong class="text-on-surface">${p.streak || 0} ${(p.streak || 0) === 1 ? 'dia' : 'dias'}</strong>!`, `Finish today to keep your <strong class="text-on-surface">${p.streak || 0}-day</strong> streak!`)}</span><span>🌟</span></div>
           </div></div></div>`)}${kidNav('hoje')}`);
     wireNav();
     const go = $('#go'); if (go) go.onclick = () => runLesson({});
@@ -421,6 +442,32 @@
   }
 
   /* ---------- Prêmios ---------- */
+  // como ganhar cada medalha e quanto falta [atual, meta]
+  function badgeGoal(k, p) {
+    const n = { first: [Object.keys(p.completed).length, 1], streak3: [p.streak || 0, 3], streak7: [p.streak || 0, 7], pts100: [p.points || 0, 100], pts500: [p.points || 0, 500], pts1000: [p.points || 0, 1000], wordwiz: [Object.keys(p.wordbank).length, 25], reader10: [Object.keys(p.completed).length, 10] }[k];
+    return n ? [Math.min(n[0], n[1]), n[1]] : null;
+  }
+  const BADGE_HOW = {
+    first: ['Termine sua primeira lição.', 'Finish your first lesson.'], perfect: ['Acerte tudo de primeira numa lição (5 perguntas ou mais).', 'Get everything right on the first try in a lesson (5+ questions).'],
+    streak3: ['Estude 3 dias seguidos.', 'Study 3 days in a row.'], streak7: ['Estude 7 dias seguidos.', 'Study 7 days in a row.'],
+    pts100: ['Junte 100 moedas.', 'Collect 100 coins.'], pts500: ['Junte 500 moedas.', 'Collect 500 coins.'], pts1000: ['Junte 1000 moedas. Você é realeza! 👑', 'Collect 1000 coins. Royalty! 👑'],
+    wordwiz: ['Aprenda 25 palavras novas.', 'Learn 25 new words.'], reader10: ['Leia 10 textos até o fim.', 'Read 10 texts to the end.'],
+    fluent: ['Leia em voz alta com muita fluência.', 'Read aloud very fluently.'], explorer: ['Experimente todos os tipos de atividade.', 'Try every kind of activity.'], comeback: ['Volte a estudar depois de uns dias sem estudar. Recomeçar é coragem!', 'Come back after a few days off. Starting again takes courage!']
+  };
+  function badgeSheet(k) {
+    const p = A.eng.prog, v = QKEngine.BADGES[k], on = p.badges.includes(k), g = badgeGoal(k, p), how = BADGE_HOW[k] || ['', ''];
+    const box = document.createElement('div');
+    box.className = 'fixed inset-0 z-50 bg-black/45 flex items-end sm:items-center justify-center p-4';
+    box.innerHTML = `<div class="w-full max-w-sm bg-surface-container-lowest rounded-3xl p-6 text-center shadow-xl badge-pop">
+      <div class="mx-auto w-24 h-24 rounded-full ${on ? 'bg-secondary-fixed badge-glow' : 'bg-surface-container'} flex items-center justify-center text-[54px] ${on ? '' : 'grayscale opacity-60'}">${v[0]}</div>
+      <h3 class="text-headline-md text-on-surface mt-3">${v[isPt() ? 1 : 2]}</h3>
+      <p class="text-label-lg ${on ? 'text-primary' : 'text-on-surface-variant'} mt-1">${on ? L('Você já ganhou esta medalha! 🎉', 'You earned this badge! 🎉') : L('Ainda não ganhou', 'Not earned yet')}</p>
+      <p class="text-body-md text-on-surface mt-3 bg-surface-container-low rounded-2xl p-3"><b>${L('Como ganhar:', 'How to earn:')}</b> ${how[isPt() ? 0 : 1]}</p>
+      ${!on && g ? `<div class="mt-3"><div class="flex justify-between text-label-sm text-on-surface-variant mb-1"><span>${L('Seu progresso', 'Your progress')}</span><span class="text-primary">${g[0]} / ${g[1]}</span></div><div class="h-3 bg-surface-container rounded-full overflow-hidden"><div class="h-full bg-primary-container rounded-full" style="width:${Math.round(100 * g[0] / g[1])}%"></div></div><p class="text-label-sm text-on-surface-variant mt-1.5">${L(`Faltam ${g[1] - g[0]}!`, `${g[1] - g[0]} to go!`)}</p></div>` : ''}
+      <button class="btn3d mt-5 w-full h-12 rounded-2xl bg-primary-container text-on-primary text-label-lg" data-close>${on ? L('Legal!', 'Cool!') : L('Vou conseguir! 💪', "I'll get it! 💪")}</button></div>`;
+    document.body.appendChild(box); sfx(on ? 'badge' : 'tap');
+    box.onclick = e => { if (e.target === box || e.target.closest('[data-close]')) box.remove(); };
+  }
   function rewards() {
     const p = A.eng.prog, B = QKEngine.BADGES, LI = isPt() ? 1 : 2, lv = level(p);
     const got = Object.keys(B).filter(k => p.badges.includes(k)).length;
@@ -451,9 +498,11 @@
       </div>
       <div class="space-y-5">
       <section><h3 class="text-headline-md text-on-surface mb-3">${kt('medalhas')}</h3>
-        <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">${Object.entries(B).map(([k, v]) => { const on = p.badges.includes(k); return `<div class="rounded-2xl p-3 flex flex-col items-center text-center gap-1 ${on ? 'bg-surface-container-lowest soft-shadow' : 'bg-surface-container-low opacity-50 grayscale'}"><span class="text-3xl">${v[0]}</span><span class="text-label-sm text-on-surface leading-tight">${v[LI]}</span>${on ? '' : I('lock', 'text-[14px] text-outline')}</div>`; }).join('')}</div></section>
+        <p class="text-body-sm text-on-surface-variant -mt-2 mb-3">${L('Toque numa medalha para ver como ganhar 👆', 'Tap a badge to see how to earn it 👆')}</p>
+        <div class="grid grid-cols-3 sm:grid-cols-4 gap-3">${Object.entries(B).map(([k, v]) => { const on = p.badges.includes(k), g = badgeGoal(k, p); return `<button data-bd="${k}" class="badge-card rounded-2xl p-3 flex flex-col items-center text-center gap-1 active:scale-95 transition ${on ? 'bg-surface-container-lowest soft-shadow ring-2 ring-secondary-container/60' : 'bg-surface-container-low'}"><span class="text-3xl ${on ? 'badge-shine' : 'opacity-40 grayscale'}">${v[0]}</span><span class="text-label-sm text-on-surface leading-tight ${on ? '' : 'opacity-70'}">${v[LI]}</span>${on ? `<span class="text-[11px] text-primary font-extrabold">✓ ${L('Ganhou!', 'Earned!')}</span>` : g ? `<span class="w-full h-1.5 bg-surface-container-high rounded-full overflow-hidden mt-0.5"><span class="block h-full bg-primary-container rounded-full" style="width:${Math.min(100, Math.round(100 * g[0] / g[1]))}%"></span></span>` : I('lock', 'text-[14px] text-outline')}</button>`; }).join('')}</div></section>
       ${(p.awards || []).length ? `<section><h3 class="text-headline-md text-on-surface mb-3">${kt('certificados')}</h3><div class="space-y-3">${p.awards.map(a => `<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm flex gap-3"><span class="text-3xl">${esc(a.icon || '🏆')}</span><div class="min-w-0"><b class="text-label-lg text-on-surface block">${esc(a.title)}</b><p class="text-body-sm text-on-surface-variant">${esc(a.msg || '')}</p></div></div>`).join('')}</div></section>` : ''}
       </div></div>`)}${kidNav('prem')}`);
+    app().querySelectorAll('[data-bd]').forEach(b => b.onclick = () => badgeSheet(b.dataset.bd));
     wireNav();
   }
 
@@ -470,8 +519,8 @@
       <section class="bg-surface-container-lowest rounded-3xl p-5 soft-shadow space-y-4">
         <div class="flex items-start justify-between gap-2"><div><h2 class="text-headline-md text-on-surface">${kt('semanaMin')}</h2><p class="text-body-sm text-on-surface-variant">${tot} min ${L('nos últimos 7 dias', 'in the last 7 days')}</p></div>
           <span class="flex items-center gap-1.5 bg-surface-container px-2.5 py-1 rounded-full text-label-sm text-on-surface"><span class="w-2.5 h-2.5 rounded-full bg-primary-container"></span>${L('Meta', 'Goal')}: ${goal} min</span></div>
-        <div class="grid grid-cols-7 gap-2 items-end h-40">${days.map(([d, m]) => `<div class="flex flex-col items-center gap-1.5 h-full justify-end"><span class="text-label-sm ${m >= goal ? 'text-primary' : 'text-on-surface-variant'}">${m}</span>
-          <div class="w-full max-w-[30px] rounded-t-lg ${m >= goal ? 'bg-primary-container' : 'bg-tertiary-container/70'}" style="height:${Math.max(3, Math.round(100 * m / max))}%"></div><span class="text-label-sm text-outline">${wk[new Date(d + 'T12:00').getDay()]}</span></div>`).join('')}</div>
+        <div class="grid grid-cols-7 gap-2">${days.map(([d, m]) => `<div class="flex flex-col items-center gap-1"><span class="text-label-sm ${m >= goal ? 'text-primary' : 'text-on-surface-variant'}">${m}</span>
+          <div class="h-28 w-full flex items-end justify-center"><div class="w-full max-w-[30px] rounded-t-lg ${m >= goal ? 'bg-primary-container' : 'bg-tertiary-container/70'}" style="height:${Math.max(3, Math.round(100 * m / max))}%"></div></div><span class="text-label-sm text-outline">${wk[new Date(d + 'T12:00').getDay()]}</span></div>`).join('')}</div>
       </section>
       <div class="space-y-5">
         <div class="grid grid-cols-3 gap-3">${[['spellcheck', Object.keys(p.wordbank).length, kt('palavras'), 'text-secondary'], ['menu_book', Object.keys(p.completed).length, L('Leituras', 'Readings'), 'text-tertiary'], ['local_fire_department', p.bestStreak || 0, L('Recorde', 'Best streak'), 'text-secondary']].map(([ic, n, l, c]) => `<div class="bg-surface-container-lowest rounded-2xl p-4 shadow-sm text-center">${I(ic, `${c} text-[24px]`, 1)}<div class="text-headline-lg-mobile text-on-surface">${n}</div><div class="text-label-sm text-on-surface-variant">${l}</div></div>`).join('')}</div>
@@ -510,13 +559,13 @@
     const pct = Math.min(100, Math.round(100 * Math.max(0, Ls.n - 1) / totalSteps));
     const st = { leitura: ['menu_book', kt('leitura')], palavras: ['spellcheck', kt('palavras')], reforco: ['auto_stories', kt('reforco')] }[S.station];
     return `<header class="fixed top-0 inset-x-0 z-40 pt-safe bg-surface/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.03)]"><div class="h-16 px-margin max-w-2xl mx-auto flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2 min-w-0">${logo}<h1 class="text-headline-md text-on-surface truncate">${L('Sessão de estudo', 'Study session')}</h1></div>
-        <div class="flex items-center gap-1.5"><button id="lk" title="${L('Área dos pais', 'Parents area')}" aria-label="${L('Área dos pais', 'Parents area')}" class="w-8 h-8 rounded-full flex items-center justify-center text-outline opacity-70">${I('lock', 'text-[18px]')}</button><div class="w-9 h-9 rounded-full bg-primary-fixed/60 flex items-center justify-center text-[20px]">${esc(A.kid.avatar || '⭐')}</div></div></div></header>
+        <button data-exit class="flex items-center gap-2 min-w-0 text-left">${logo}<h1 class="text-headline-md text-on-surface truncate">${L('Sessão de estudo', 'Study session')}</h1></button>
+        <div class="flex items-center gap-1.5"><button id="lk" title="${L('Área dos pais', 'Parents area')}" aria-label="${L('Área dos pais', 'Parents area')}" class="w-8 h-8 rounded-full flex items-center justify-center text-outline opacity-70">${I('lock', 'text-[18px]')}</button><button data-exit aria-label="${L('Parar a lição', 'Stop lesson')}" class="w-9 h-9 rounded-full bg-primary-fixed/60 flex items-center justify-center text-[20px]">${esc(A.kid.avatar || '⭐')}</button></div></div></header>
       <main class="pt-20 pb-36 px-margin max-w-2xl mx-auto">
       <div class="flex items-center justify-between gap-2 mb-3">
         <button id="x" aria-label="Fechar" class="w-11 h-11 flex items-center justify-center rounded-full bg-surface-container text-on-surface shadow-sm active:scale-90 shrink-0">${I('close', 'text-[20px]')}</button>
         <div class="flex items-center gap-1.5 min-w-0">
-          <span class="bg-surface-container px-3 py-1.5 rounded-full text-label-sm text-on-surface shadow-sm whitespace-nowrap">${L('Passo', 'Step')} ${Ls.n} ${L('de', 'of')} ${totalSteps}</span>
+          ${S.more ? `<span class="bg-secondary-container text-on-secondary-container px-3 py-1.5 rounded-full text-label-sm shadow-sm whitespace-nowrap">⭐ ${L('Extra', 'Extra')} +${Math.max(0, A.eng.minutesToday() - A.eng.goalMin())} min</span>` : `<span class="bg-surface-container px-3 py-1.5 rounded-full text-label-sm text-on-surface shadow-sm whitespace-nowrap">${L('Passo', 'Step')} ${Ls.n} ${L('de', 'of')} ${totalSteps}</span>`}
           <span class="bg-surface-container-low px-3 py-1.5 rounded-full text-label-sm text-on-surface-variant flex items-center gap-1 whitespace-nowrap">${I('timer', 'text-[16px] text-tertiary')}${Math.max(1, Math.round(S.sec / 60))} min</span>
         </div>
         <span class="flex items-center gap-1 bg-secondary-container text-on-secondary-container px-3 py-1.5 rounded-full text-label-sm shadow-sm whitespace-nowrap">${I('star', 'text-[16px]', 1)}+${S.earned}</span>
@@ -542,12 +591,18 @@
         return st.kind === 'page' ? pageStep(st) : st.kind === 'match' ? matchStep(st) : qStep(st);
       });
     };
-    $('#x').onclick = () => {
+    const askExit = () => {
+      if (document.querySelector('.qk-exit')) return;
+      const S = A.eng.s, left = S ? Math.max(0, A.eng.goalSteps() - A.eng.stepsToday()) : 0;
       const box = document.createElement('div');
-      box.className = 'fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4';
-      box.innerHTML = `<div class="w-full max-w-md bg-surface-container-lowest rounded-3xl p-6 space-y-4 shadow-xl"><h3 class="text-headline-md text-on-surface">${kt('fechar')}</h3><div class="grid grid-cols-2 gap-3"><button id="no" class="h-12 rounded-2xl bg-surface-container text-on-surface text-label-lg">${kt('fecharNao')}</button><button id="yes" class="btn3d h-12 rounded-2xl bg-primary-container text-on-primary text-label-lg">${kt('fecharSim')}</button></div></div>`;
-      document.body.appendChild(box); box.querySelector('#no').onclick = () => box.remove(); box.querySelector('#yes').onclick = () => { box.remove(); finish(true); };
+      box.className = 'qk-exit fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4';
+      box.innerHTML = `<div class="w-full max-w-md bg-surface-container-lowest rounded-3xl p-6 space-y-4 shadow-xl text-center"><div class="text-[44px]">⏸️</div><h3 class="text-headline-md text-on-surface">${L('Quer parar agora?', 'Stop for now?')}</h3>
+        <p class="text-body-md text-on-surface-variant">${left ? L(`Faltam só ${left} atividades para a meta de hoje. O que você já fez fica salvo.`, `Only ${left} activities left for today's goal. What you did is saved.`) : L('O que você já fez fica salvo.', 'What you did is saved.')}</p>
+        <div class="grid grid-cols-2 gap-3"><button id="no" class="btn3d h-12 rounded-2xl bg-primary-container text-on-primary text-label-lg">${L('Continuar', 'Keep going')}</button><button id="yes" class="h-12 rounded-2xl bg-surface-container text-on-surface text-label-lg">${L('Parar', 'Stop')}</button></div></div>`;
+      document.body.appendChild(box); box.querySelector('#no').onclick = () => box.remove(); box.onclick = ev => { if (ev.target === box) box.remove(); }; box.querySelector('#yes').onclick = () => { box.remove(); finish(true); };
     };
+    $('#x').onclick = askExit;
+    app().querySelectorAll('[data-exit]').forEach(b => b.onclick = askExit);
     app().querySelectorAll('.word').forEach(w => w.onclick = () => {
       document.querySelectorAll('.defpop').forEach(x => x.remove());
       const box = document.createElement('div'); box.className = 'defpop fixed left-4 right-4 bottom-28 z-50 max-w-md mx-auto bg-surface-container-lowest rounded-2xl p-4 shadow-xl flex gap-3 items-start';
@@ -644,7 +699,7 @@
     };
   }
   /* ---- medidor de leitura (reconhecimento de voz grátis do navegador; é uma ESTIMATIVA) ---- */
-  const meterOn = () => { try { return localStorage.getItem('qk.medidor') !== '0'; } catch (e) { return true; } };
+  const meterOn = () => { try { return localStorage.getItem('qk.medidor') === '1'; } catch (e) { return false; } };   // desligado: a leitura será avaliada pela IA
   const normW = w => String(w).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9']/g, '').replace(/'/g, '');
   function near(a, b) {
     if (a === b) return true; if (!a || !b) return false;
@@ -754,7 +809,7 @@
     let ans = null, hint = false, answered = false;
     const order = q.type === 'mc' ? shuffle(q.options.map((o, i) => i)) : null;
     const tiles = (q.type === 'order' || q.type === 'sort') ? shuffle(q.items.map((x, i) => i)) : null;
-    const picked = [], placed = {}; let selTile = null;
+    const picked = [], placed = {}; let selTile = null, drawnQ = false;
     const chip = skillInfo(q.skill);
     const instr = { order: kt('ordene'), sort: kt('separe') }[q.type] || '';
     const badge = step.source === 'similar' ? `<span class="bg-secondary-fixed text-on-secondary-fixed px-2.5 py-0.5 rounded-full text-label-sm uppercase tracking-wide">${L('Parecida', 'Similar')}</span>`
@@ -794,7 +849,7 @@
         ${q.hint ? (hint ? `<div class="flex items-center gap-3 p-3.5 mt-5 rounded-xl bg-surface-container-low shadow-sm"><div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center shrink-0 text-on-secondary-container">${I('lightbulb', 'text-[18px]')}</div><p class="text-body-sm text-on-surface-variant leading-snug">${md(q.hint)}</p></div>`
           : `<button id="hint" class="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-low text-label-md text-on-surface-variant">${I('lightbulb', 'text-[18px] text-secondary')} ${L('Ver dica', 'Show hint')}</button>`) : ''}
         <div id="fb"></div>
-        ${nearBottom(`<button id="ok" type="button" ${ready() ? '' : 'disabled'} class="btn3d w-full h-14 rounded-xl bg-primary-container text-on-primary text-headline-md flex items-center justify-center gap-2"><span>${kt('conferir')}</span>${I('arrow_forward', 'text-[22px]')}</button>`)}`);
+        ${nearBottom(`<button id="ok" type="button" ${ready() ? '' : 'disabled'} class="btn3d w-full h-14 rounded-xl bg-primary-container text-on-primary text-headline-md flex items-center justify-center gap-2"><span>${kt('conferir')}</span>${I('arrow_forward', 'text-[22px]')}</button>`)}`, drawnQ); drawnQ = true;
       wireTop(); wire();
     };
     const wire = () => {
@@ -825,6 +880,7 @@
       fb.innerHTML = r.ok === null
         ? `<div class="mt-5 bg-tertiary-fixed text-on-tertiary-fixed rounded-2xl p-4 flex items-center gap-3">${I('edit_note', 'text-[28px]')}<span class="text-label-lg">${kt('enviado')}</span></div>`
         : `<div class="mt-5 bg-primary-container/15 rounded-2xl p-4 flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-primary-container text-on-primary flex items-center justify-center shrink-0">${I('check', 'text-[24px]', 1)}</div><div class="flex-1"><p class="text-headline-md text-primary">${msgs[Math.floor(Math.random() * msgs.length)]}</p>${q.explain ? `<p class="text-body-sm text-on-surface-variant mt-0.5">${md(q.explain)}</p>` : ''}</div><span class="text-label-lg text-secondary">+${r.coins} 🪙</span></div>`;
+      if (r.ok) cheer(r.coins, true); else sfx('tap');
       const ok = $('#ok'); ok.innerHTML = `<span>${kt('proxima')}</span>${I('arrow_forward', 'text-[22px]')}`; ok.disabled = false; ok.onclick = () => { tickStep('q'); nextStep(); };
       setTimeout(() => fb.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
     };
@@ -833,6 +889,7 @@
 
   /* tela "Tudo bem se enganar!" (Stitch: feedback de erro) */
   function wrongScreen(step, q, a, chip) {
+    sfx('no');
     const why = (window.WHY || {})[q.id];
     const chosen = q.type === 'mc' ? q.options[a]
       : q.type === 'sort' ? q.items.map((it, i) => ({ it, put: a[i] })).filter(x => x.put !== q.buckets[x.it.b] && x.put !== x.it.b).map(x => `${x.it.t} → ${x.put || '?'}`).join('\n')
@@ -906,42 +963,106 @@
   }
 
   /* ---- Ligue os pontos (linhas curvas coloridas) ---- */
+  /* ---- sons baixinhos (gerados no próprio app) e comemoração curta ---- */
+  const somOn = () => { try { return localStorage.getItem('qk.som') !== '0'; } catch (e) { return true; } };
+  let AC = null;
+  function sfx(kind) {
+    if (!somOn()) return;
+    try {
+      AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume();
+      const notes = { ok: [[660, 0], [880, 0.09]], no: [[330, 0], [262, 0.12]], tap: [[520, 0]], coin: [[988, 0], [1319, 0.07]], done: [[523, 0], [659, 0.12], [784, 0.24], [1047, 0.38]], badge: [[784, 0], [988, 0.1], [1175, 0.2], [1568, 0.32]] }[kind] || [[600, 0]];
+      notes.forEach(([f, t0]) => {
+        const o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime + t0;
+        o.type = kind === 'no' ? 'triangle' : 'sine'; o.frequency.value = f;
+        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(kind === 'no' ? 0.05 : 0.07, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + (kind === 'done' || kind === 'badge' ? 0.35 : 0.22));
+        o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + 0.4);
+      });
+    } catch (e) {}
+  }
+  A.sfx = sfx;
+  A._steps = { match: st => { Ls = Ls || { t0: Date.now(), hidden: 0, step: st, n: 1 }; Ls.step = st; matchStep(st); } };
+  // acertou: som + confete pequeno + moedinhas subindo (curto, sem exagero)
+  function cheer(coins, quiet) {
+    sfx('ok'); setTimeout(() => sfx('coin'), 180);
+    const box = document.createElement('div'); box.className = 'cheer-burst'; box.setAttribute('aria-hidden', 'true');
+    const conf = ['#feba3e', '#14a3a3', '#3e9bd0', '#e84393', '#8b72f6'];
+    box.innerHTML = Array.from({ length: 14 }, (x, i) => `<i style="--a:${i * 25.7}deg;--d:${50 + (i % 4) * 14}px;background:${conf[i % 5]}"></i>`).join('') + (coins ? `<b>+${coins} 🪙</b>` : '');
+    document.body.appendChild(box); setTimeout(() => box.remove(), 1100);
+    if (!quiet && coins) toast('🎉 +' + coins + ' 🪙');
+  }
+
   function matchStep(step) {
-    const e = A.eng; const ws = step.words; const defs = shuffle(ws.slice());
+    const e = A.eng; const ws = step.words;
     const COLORS = ['#3e9bd0', '#feba3e', '#14a3a3', '#e84393', '#8b72f6', '#ef6c3a'];
-    const icons = ['air', 'cloud', 'water_drop', 'eco', 'bolt', 'star'];
-    let selL = null, done = [], mistakes = 0;
+    let pairs = {}, selL = null, selR = null, mistakes = 0, round = 0, checked = false;
+    // variações quando erra: troca a ordem, inverte os lados e usa outra explicação da palavra (se houver)
+    const defOf = w => { const alts = (e.defAlts && e.defAlts[w.toLowerCase()]) || []; const all = [e.defs[w.toLowerCase()] || ''].concat(alts).filter(Boolean); return all[round % all.length] || ''; };
+    let order = { L: ws.slice(), R: shuffle(ws.slice()) }, flip = false;
+    const colorOf = w => COLORS[ws.indexOf(w) % COLORS.length];
+    const card = (side, w, i) => {
+      const isWord = (side === 'L') !== flip;
+      return `<button data-${side.toLowerCase()}="${esc(w)}" class="mt-card w-full min-h-[76px] flex items-center gap-3 px-3 py-3 rounded-xl bg-surface-container-lowest text-left border-2 border-transparent shadow-sm transition">
+        ${side === 'L' ? `<span class="text-label-sm text-primary shrink-0">0${i + 1}</span>` : '<span data-badge class="hidden shrink-0 w-7 h-7 rounded-full text-white text-label-sm items-center justify-center"></span>'}
+        <span class="min-w-0 ${isWord ? 'text-label-lg' : 'text-body-sm'} text-on-surface break-words">${esc(isWord ? w : defOf(w))}</span></button>`;
+    };
     const draw = () => {
       view(`${lessonTop({ icon: 'hub', name: L('Jogo de conexão', 'Matching game') })}
-        <div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm mb-4 relative overflow-hidden">
-          <div class="flex items-center gap-2 mb-1"><span class="inline-flex items-center gap-1 bg-tertiary-fixed text-on-tertiary-fixed px-2.5 py-1 rounded-full text-label-sm">${I('hub', 'text-[14px]')} ${L('Jogo de conexão', 'Matching game')}</span><span class="text-label-sm text-on-surface-variant">${L('Toque para ligar', 'Tap to connect')}</span></div>
-          <h2 class="text-headline-lg-mobile md:text-headline-lg text-on-surface">${L('Ligue cada palavra ao seu significado!', 'Match each word to its meaning!')}</h2>
-          <p class="text-body-sm text-on-surface-variant">${kt('toque')}</p></div>
+        <div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm mb-4">
+          <div class="flex items-center gap-2 mb-1"><span class="inline-flex items-center gap-1 bg-tertiary-fixed text-on-tertiary-fixed px-2.5 py-1 rounded-full text-label-sm">${I('hub', 'text-[14px]')} ${L('Jogo de conexão', 'Matching game')}</span>${round ? `<span class="text-label-sm text-secondary">${L('Nova rodada', 'New round')} ${round + 1} 🔄</span>` : ''}</div>
+          <h2 class="text-headline-lg-mobile md:text-headline-lg text-on-surface">${flip ? L('Ligue cada significado à sua palavra!', 'Match each meaning to its word!') : L('Ligue cada palavra ao seu significado!', 'Match each word to its meaning!')}</h2>
+          <p class="text-body-sm text-on-surface-variant">${L('Toque num cartão e depois no outro. Mudou de ideia? Toque de novo para desfazer.', 'Tap one card, then the other. Changed your mind? Tap again to undo.')}</p></div>
         <div id="mw" class="match-wrap grid grid-cols-2 gap-x-8 md:gap-x-16 gap-y-3"><svg id="lines"></svg>
-          <div class="space-y-3">${ws.map((w, i) => `<button data-l="${esc(w)}" class="w-full min-h-[76px] flex items-center gap-3 px-3 py-3 rounded-xl bg-surface-container-lowest text-left transition ${done.includes(w) ? 'opacity-90' : 'shadow-sm active:scale-[0.98]'} ${selL === w ? 'ring-2 ring-primary-container' : ''}">
-            <span class="w-9 h-9 rounded-xl bg-tertiary-fixed/60 text-tertiary hidden sm:flex items-center justify-center shrink-0">${I(icons[i % icons.length], 'text-[20px]')}</span><span class="min-w-0"><span class="block text-label-sm text-primary">0${i + 1}</span><span class="block text-label-lg text-on-surface break-words">${esc(w)}</span></span></button>`).join('')}</div>
-          <div class="space-y-3">${defs.map(w => `<button data-r="${esc(w)}" class="w-full min-h-[76px] flex items-center px-3 py-3 rounded-xl bg-surface-container-lowest text-left text-body-sm text-on-surface transition ${done.includes(w) ? 'opacity-90' : 'shadow-sm active:scale-[0.98]'}">${esc(e.defs[w.toLowerCase()] || '')}</button>`).join('')}</div>
-        </div>
-        <div class="mt-4 bg-surface-container-low rounded-2xl p-3 flex items-center justify-between"><span class="flex items-center gap-2 text-label-md text-on-surface">${I(done.length === ws.length ? 'check_circle' : 'link', 'text-primary text-[22px]', 1)} ${done.length} ${L('de', 'of')} ${ws.length} ${L('pares conectados', 'pairs connected')}</span>${done.length === ws.length ? `<span class="bg-primary text-on-primary text-label-sm px-3 py-1 rounded-full">${L('Tudo pronto!', 'All done!')}</span>` : ''}</div>
-        <div class="mt-3 bg-surface-container-low rounded-2xl p-3 flex items-start gap-2 text-body-sm text-on-surface-variant">${I('lightbulb', 'text-secondary text-[18px]')} <span><b class="text-on-surface">${L('Dica rápida:', 'Quick tip:')}</b> ${L('leia o significado em voz baixa antes de ligar.', 'read each meaning quietly before you connect.')}</span></div>
-        ${lessonBottom(`<button id="ok" ${done.length === ws.length ? '' : 'disabled'} class="btn3d w-full h-14 rounded-xl bg-primary-container text-on-primary text-headline-md flex items-center justify-center gap-2"><span>${L('Conferir conexões', 'Check matches')}</span><span>🚀</span></button>`)}`);
-      wireTop(); lines();
-      app().querySelectorAll('[data-l]').forEach(b => b.onclick = () => { if (done.includes(b.dataset.l)) return; selL = b.dataset.l; draw(); });
-      app().querySelectorAll('[data-r]').forEach(b => b.onclick = () => {
-        const r = b.dataset.r; if (done.includes(r) || !selL) { if (!selL) toast(L('Toque primeiro numa palavra 👈', 'Tap a word first 👈')); return; }
-        if (selL === r) { done.push(r); selL = null; draw(); }
-        else { mistakes++; b.classList.add('shake', 'ring-2', 'ring-error'); setTimeout(() => { selL = null; draw(); }, 380); }
-      });
-      $('#ok').onclick = () => { tickStep('q'); const rr = e.recordMatch(step, mistakes); persist(false); toast((rr.ok ? '🎉 ' : '👍 ') + '+' + rr.coins + ' 🪙'); nextStep(); };
+          <div class="space-y-3">${order.L.map((w, i) => card('L', w, i)).join('')}</div>
+          <div class="space-y-3">${order.R.map((w, i) => card('R', w, i)).join('')}</div></div>
+        <div class="mt-4 bg-surface-container-low rounded-2xl p-3 flex items-center justify-between gap-2"><span id="mcount" class="flex items-center gap-2 text-label-md text-on-surface"></span><button id="mclr" class="text-label-sm text-primary underline">${L('Limpar', 'Clear')}</button></div>
+        ${nearBottom(`<button id="ok" disabled class="btn3d w-full h-14 rounded-xl bg-primary-container text-on-primary text-headline-md flex items-center justify-center gap-2"><span>${L('Conferir conexões', 'Check matches')}</span><span>🚀</span></button>`)}`);
+      wireTop(); update();
+      app().querySelectorAll('[data-l]').forEach(b => b.onclick = () => tap('L', b.dataset.l));
+      app().querySelectorAll('[data-r]').forEach(b => b.onclick = () => tap('R', b.dataset.r));
+      $('#mclr').onclick = () => { if (checked) return; pairs = {}; selL = selR = null; update(); };
+      $('#ok').onclick = check;
     };
-    const lines = () => {
+    const rightOf = r => Object.keys(pairs).find(l => pairs[l] === r);
+    function tap(side, w) {
+      if (checked) return;
+      if (side === 'L') {
+        if (pairs[w] !== undefined) { delete pairs[w]; selL = w; }            // desfaz e deixa selecionado para ligar de novo
+        else if (selR) { const old = rightOf(selR); if (old) delete pairs[old]; pairs[w] = selR; selR = selL = null; }
+        else selL = selL === w ? null : w;
+      } else {
+        const owner = rightOf(w);
+        if (selL) { if (owner) delete pairs[owner]; pairs[selL] = w; selL = null; }
+        else if (owner) { delete pairs[owner]; selR = w; }
+        else selR = selR === w ? null : w;
+      }
+      update();
+    }
+    function update() {
+      const n = Object.keys(pairs).length;
+      app().querySelectorAll('[data-l]').forEach(b => { const w = b.dataset.l, on = pairs[w] !== undefined; b.style.borderColor = selL === w ? 'rgb(var(--c-primary-container,20 163 163))' : on ? colorOf(w) : 'transparent'; b.classList.toggle('ring-2', selL === w); b.classList.toggle('ring-primary-container', selL === w); });
+      app().querySelectorAll('[data-r]').forEach(b => { const w = b.dataset.r, owner = rightOf(w), bd = b.querySelector('[data-badge]'); b.style.borderColor = selR === w ? 'rgb(var(--c-primary-container,20 163 163))' : owner ? colorOf(owner) : 'transparent'; b.classList.toggle('ring-2', selR === w); b.classList.toggle('ring-primary-container', selR === w); if (bd) { bd.classList.toggle('hidden', !owner); bd.classList.toggle('flex', !!owner); if (owner) { bd.style.background = colorOf(owner); bd.textContent = '0' + (order.L.indexOf(owner) + 1); } } });
+      $('#mcount').innerHTML = `${I(n === ws.length ? 'check_circle' : 'link', 'text-primary text-[22px]', 1)} ${n} ${L('de', 'of')} ${ws.length} ${L('ligados', 'connected')}`;
+      $('#ok').disabled = n !== ws.length; lines();
+    }
+    function check() {
+      checked = true; const wrong = ws.filter(w => pairs[w] !== w);
+      lines(true);
+      app().querySelectorAll('[data-l]').forEach(b => { const ok = pairs[b.dataset.l] === b.dataset.l; b.style.borderColor = ok ? '#22a06b' : '#e5484d'; b.classList.toggle('shake', !ok); });
+      if (!wrong.length) { tickStep('q'); sfx('ok'); const rr = e.recordMatch(step, mistakes); persist(false); cheer(rr.coins); setTimeout(nextStep, 900); return; }
+      mistakes += wrong.length; sfx('no');
+      $('#mcount').innerHTML = `${I('refresh', 'text-error text-[22px]')} ${wrong.length} ${wrong.length === 1 ? L('ligação errada', 'wrong match') : L('ligações erradas', 'wrong matches')}. ${L('Vamos de novo, de outro jeito!', "Let's try again, a new way!")}`;
+      $('#ok').disabled = true;
+      setTimeout(() => { round++; flip = !flip; pairs = {}; selL = selR = null; checked = false; order = { L: shuffle(ws.slice()), R: shuffle(ws.slice()) }; if (flip) order = { L: order.R, R: order.L }; draw(); }, 1800);
+    }
+    const lines = showResult => {
       const wrap = $('#mw'), svg = $('#lines'); if (!wrap || !svg) return;
       const W = wrap.getBoundingClientRect(); let out = '';
-      done.forEach(w => {
-        const i = ws.indexOf(w);
-        const a = wrap.querySelector(`[data-l="${CSS.escape(w)}"]`).getBoundingClientRect(), b = wrap.querySelector(`[data-r="${CSS.escape(w)}"]`).getBoundingClientRect();
+      Object.keys(pairs).forEach(l => {
+        const r = pairs[l], ea = wrap.querySelector(`[data-l="${CSS.escape(l)}"]`), eb = wrap.querySelector(`[data-r="${CSS.escape(r)}"]`); if (!ea || !eb) return;
+        const a = ea.getBoundingClientRect(), b = eb.getBoundingClientRect();
+        const col = showResult ? (l === r ? '#22a06b' : '#e5484d') : colorOf(l);
         const x1 = a.right - W.left - 6, y1 = a.top + a.height / 2 - W.top, x2 = b.left - W.left + 6, y2 = b.top + b.height / 2 - W.top, dx = (x2 - x1) * 0.55;
-        out += `<path d="M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}" stroke="${COLORS[i % COLORS.length]}" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="${x1}" cy="${y1}" r="6" fill="${COLORS[i % COLORS.length]}"/><circle cx="${x2}" cy="${y2}" r="6" fill="${COLORS[i % COLORS.length]}"/>`;
+        out += `<path d="M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}" stroke="${col}" stroke-width="5" fill="none" stroke-linecap="round" ${showResult && l !== r ? 'stroke-dasharray="8 6"' : ''}/><circle cx="${x1}" cy="${y1}" r="6" fill="${col}"/><circle cx="${x2}" cy="${y2}" r="6" fill="${col}"/>`;
       });
       svg.innerHTML = out;
     };
@@ -962,12 +1083,19 @@
     const confetti = Array.from({ length: 22 }, (x, i) => `<div class="confetti-particle ${i % 2 ? 'rounded-full' : 'rounded-sm'}" style="left:${(i * 37) % 92 + 4}%;top:-10px;width:${5 + i % 4}px;height:${6 + (i * 3) % 7}px;background:${conf[i % 5]};--sway-x:${(i % 2 ? -1 : 1) * (12 + i % 10)}px;--rot:${(i % 2 ? -1 : 1) * (160 + i * 9)}deg;animation-duration:${3.5 + (i % 6) * 0.2}s;animation-delay:${(i * 0.17).toFixed(2)}s"></div>`).join('');
     const star = (on, big) => `<div class="${big ? 'w-[72px] h-[72px] -mt-3 scale-110 bg-secondary-container shadow-md' : 'w-14 h-14 bg-secondary-fixed shadow-sm'} rounded-full flex items-center justify-center ${on ? '' : 'opacity-30 grayscale'}">${I('star', `${big ? 'text-[44px]' : 'text-[36px]'} text-on-secondary-container`, 1)}</div>`;
     const mins = Math.max(1, Math.round(S.sec / 60));
+    setTimeout(() => sfx(e.goalDone() ? 'done' : 'ok'), 250); if (r.newBadges.length) setTimeout(() => sfx('badge'), 900);
     const skills = Array.from(new Set(S.items.map(i => i.skill).filter(Boolean))).slice(0, 2).map(s => skillInfo(s).name);
     view(`<main class="pt-10 pb-10 px-margin max-w-2xl mx-auto">
       <div class="flex flex-col items-center text-center pt-6 pb-2 mb-6 relative"><div aria-hidden="true" class="absolute inset-x-0 top-6 h-72 pointer-events-none overflow-hidden">${confetti}</div>
         <span class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-surface-container-highest shadow-sm mb-3 relative">${I('stars', 'text-[18px] text-primary', 1)}<span class="text-label-md text-on-surface-variant uppercase tracking-wider">${L('Missão cumprida! ✨', 'Mission complete! ✨')}</span></span>
         <h2 class="text-headline-xl-mobile md:text-headline-xl text-on-surface mb-2 relative">${kt('completa')}</h2>
         <p class="text-body-md text-on-surface-variant max-w-[320px] relative">${L(`Você arrasou nos desafios de hoje, ${esc(A.kid.apelido)}!`, `You crushed today's challenges, ${esc(A.kid.apelido)}!`)}</p></div>
+      ${e.goalDone() ? (() => { const gm = e.goalMin(), tm = e.minutesToday(), ex = Math.max(0, tm - gm); return `<div class="done-card rounded-3xl p-5 mb-5 text-center relative overflow-hidden">
+        <div class="flex items-center justify-center gap-3 mb-2"><span class="w-12 h-12 rounded-full bg-primary-fixed/70 flex items-center justify-center text-[26px]">${esc(A.kid.avatar || '⭐')}</span><span class="done-stamp">${L('FEITO', 'DONE')} ✅</span></div>
+        <p class="text-headline-md text-on-surface">${L(`Lição de hoje completa, ${esc(A.kid.apelido)}!`, `Today's lesson done, ${esc(A.kid.apelido)}!`)}</p>
+        <p class="text-label-lg text-on-surface-variant capitalize mt-1">${dayStamp()}</p>
+        <div class="flex justify-center gap-2 mt-3 flex-wrap"><span class="px-3 py-1 rounded-full bg-surface-container-lowest text-label-md text-on-surface">⏱️ ${tm} min</span><span class="px-3 py-1 rounded-full bg-surface-container-lowest text-label-md text-on-surface">✏️ ${e.stepsToday()} ${L('atividades', 'activities')}</span>${ex ? `<span class="px-3 py-1 rounded-full bg-secondary-container text-on-secondary-container text-label-md">⭐ +${ex} min ${L('extra', 'extra')}</span>` : ''}</div>
+        <p class="text-body-sm text-on-surface-variant mt-3">${L('Mostre esta tela para seus pais! 📱', 'Show this screen to your parents! 📱')}</p></div>`; })() : ''}
       <div class="bg-surface-container-lowest rounded-xl p-5 mb-5 soft-shadow flex flex-col items-center"><div class="flex items-end justify-center gap-3 mb-3">${star(s3 >= 1)}${star(s3 >= 2, true)}${star(s3 >= 3)}</div>
         <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-surface-container-low rounded-full">${I('verified', 'text-[16px] text-primary', 1)}<span class="text-label-md text-primary">${s3} ${L('de 3 estrelas conquistadas!', 'of 3 stars earned!')}</span></span></div>
       ${r.newBadges.map(b => `<div class="bg-surface-container-highest rounded-xl p-4 mb-5 shadow-sm flex items-center gap-4"><div class="w-14 h-14 rounded-xl bg-primary-container text-on-primary flex items-center justify-center shrink-0 text-3xl">${B[b] ? B[b][0] : '🏅'}</div>

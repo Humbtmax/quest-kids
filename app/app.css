@@ -35,3 +35,18 @@ input[type=range] { accent-color: rgb(var(--c-primary-container)); width: 100%; 
 #app .grid > * { min-width: 0; }
 @keyframes qkpop { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
 .meter-miss { text-decoration: underline wavy rgb(230 140 0); text-underline-offset: 4px; }
+html, body { overflow-x: hidden; }
+#app { overflow-x: clip; }
+.cheer-burst { position: fixed; left: 50%; top: 42%; width: 0; height: 0; z-index: 80; pointer-events: none; }
+.cheer-burst i { position: absolute; width: 8px; height: 8px; border-radius: 2px; animation: qkburst .9s ease-out forwards; }
+.cheer-burst b { position: absolute; left: -40px; width: 80px; text-align: center; top: -10px; font-weight: 900; font-size: 22px; color: #e8a400; text-shadow: 0 2px 6px rgba(0,0,0,.15); animation: qkcoin 1s ease-out forwards; }
+@keyframes qkburst { from { transform: rotate(var(--a)) translateX(0) scale(1); opacity: 1; } to { transform: rotate(var(--a)) translateX(var(--d)) scale(.6); opacity: 0; } }
+@keyframes qkcoin { 0% { transform: translateY(0) scale(.7); opacity: 0; } 25% { opacity: 1; transform: translateY(-16px) scale(1.1); } 100% { transform: translateY(-60px) scale(1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cheer-burst { display: none; } }
+.done-stamp { display: inline-block; padding: 6px 14px; border: 4px solid rgb(var(--c-primary, 0 106 106)); color: rgb(var(--c-primary, 0 106 106)); border-radius: 14px; font-weight: 900; font-size: 26px; letter-spacing: .06em; transform: rotate(-8deg); animation: qkstamp .5s cubic-bezier(.2,1.6,.4,1) both; }
+@keyframes qkstamp { from { transform: rotate(-8deg) scale(2); opacity: 0; } to { transform: rotate(-8deg) scale(1); opacity: 1; } }
+.done-card { background: linear-gradient(135deg, rgb(var(--c-primary-fixed) / .55), rgb(var(--c-secondary-fixed) / .55)); border: 2px dashed rgb(var(--c-primary) / .5); }
+.badge-shine { filter: drop-shadow(0 0 6px rgba(254,186,62,.6)); }
+.badge-glow { box-shadow: 0 0 0 6px rgba(254,186,62,.25), 0 0 24px rgba(254,186,62,.55); animation: qkglow 1.6s ease-in-out infinite alternate; }
+@keyframes qkglow { from { box-shadow: 0 0 0 4px rgba(254,186,62,.2), 0 0 14px rgba(254,186,62,.4); } to { box-shadow: 0 0 0 8px rgba(254,186,62,.3), 0 0 30px rgba(254,186,62,.7); } }
+.badge-pop { animation: qkpop .3s cubic-bezier(.2,1.4,.4,1); }

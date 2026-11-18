@@ -30,7 +30,7 @@
             <span class="flex items-center gap-1 bg-surface-container-high px-2.5 py-1 rounded-full">${I('lock', 'text-primary text-[16px]')}<span class="text-label-sm text-primary uppercase">${tx('Pais', 'Parents')}</span></span>
           </div>
           <nav class="hidden lg:flex items-center gap-1">${tabs.map(([k, i, l]) => `<button data-tab="${k}" class="flex items-center gap-1.5 px-3 py-2 rounded-full text-label-md ${tab === k ? 'bg-primary-container text-on-primary' : 'text-on-surface-variant hover:bg-surface-container'}">${I(i, 'text-[18px]', tab === k)}${l}</button>`).join('')}</nav>
-          <div class="flex items-center gap-2 shrink-0"><button id="ptm" title="${A().temaAtual() === 'escuro' ? tx('Modo claro', 'Light mode') : tx('Modo escuro', 'Dark mode')}" class="w-9 h-9 rounded-full bg-surface-container-high text-on-surface flex items-center justify-center">${I(A().temaAtual() === 'escuro' ? 'light_mode' : 'dark_mode', 'text-[20px]', 1)}</button>
+          <div class="flex items-center gap-2 shrink-0">${A().themeSwitch('ptm', A().temaAtual() === 'escuro')}
           <div class="w-9 h-9 rounded-full bg-primary flex items-center justify-center">${I('person', 'text-on-primary text-[20px]')}</div></div>
         </div></header>
       <main class="pt-20 pb-32 lg:pb-12 px-margin md:px-margin-tablet max-w-6xl mx-auto">${QK.DEMO ? A().demoBar() : ''}${inner}</main>
@@ -152,7 +152,7 @@
       const h = box.offsetHeight;
       box.style.cssText += `;position:relative;overflow:hidden;max-height:${h}px;transition:background-color .2s,transform .4s ease .35s,opacity .4s ease .35s,max-height .35s ease .7s,margin .35s ease .7s,padding .35s ease .7s`;
       box.insertAdjacentHTML('beforeend', `<div class="absolute inset-0 rounded-2xl bg-primary-container/95 text-on-primary flex items-center justify-center gap-2 text-headline-md" style="animation:qkpop .25s ease">${I('check_circle', 'text-[34px]', 1)} ${label}</div>`);
-      requestAnimationFrame(() => { box.style.transform = 'translateX(110%)'; box.style.opacity = '0'; box.style.maxHeight = '0px'; box.style.marginTop = '0'; box.style.paddingTop = box.style.paddingBottom = '0'; });
+      requestAnimationFrame(() => { box.style.transform = 'translateX(24px) scale(.96)'; box.style.opacity = '0'; box.style.maxHeight = '0px'; box.style.marginTop = '0'; box.style.paddingTop = box.style.paddingBottom = '0'; });
       setTimeout(() => { box.remove(); const n = app().querySelectorAll(sel).length; const c = $(ct); if (c) c.textContent = `(${n})`; if (!n) { const e = $(em); e && e.classList.remove('hidden'); } }, 1100);
     };
     app().querySelectorAll('[data-score]').forEach(b => b.onclick = async () => {
@@ -331,9 +331,10 @@
           <div class="mt-3">${seg([['claro', '☀️ ' + tx('Claro', 'Light')], ['escuro', '🌙 ' + tx('Escuro', 'Dark')]], d.tema, 'data-tm')}</div>
           ${lbl(`${tx('Tempo por dia', 'Time per day')}: <b id="mv">${d.minutos}</b> min ${d.minutos <= 20 ? `<span class="ml-1 text-label-sm bg-primary/10 text-primary px-2 py-0.5 rounded-full">${tx('recomendado', 'recommended')}</span>` : ''}`)}
           <input type="range" min="15" max="60" step="5" value="${d.minutos}" id="mn"><div class="flex justify-between text-label-sm text-on-surface-variant"><span>15 min</span><span>1 h</span></div>
-          <p class="text-body-sm text-on-surface-variant mt-2 flex gap-2">${I('tips_and_updates', 'text-[18px] text-primary shrink-0')}<span>${tx(`Cerca de <b>${Math.min(40, Math.round(d.minutos * 0.6 + 4))} atividades</b> por dia. Comece de leve, todos os dias, e aumente só se precisar: o que mais ajuda é a constância, não o tempo.`, `About <b>${Math.min(40, Math.round(d.minutos * 0.6 + 4))} activities</b> a day. Start light, every day, and increase only if needed: consistency helps more than time.`)}</span></p>
+          <p class="text-body-sm text-on-surface-variant mt-2 flex gap-2">${I('tips_and_updates', 'text-[18px] text-primary shrink-0')}<span>${tx(`Cerca de <b id="atv">${Math.min(40, Math.round(d.minutos * 0.6 + 4))} atividades</b> por dia. Comece de leve, todos os dias, e aumente só se precisar: o que mais ajuda é a constância, não o tempo.`, `About <b id="atv">${Math.min(40, Math.round(d.minutos * 0.6 + 4))} activities</b> a day. Start light, every day, and increase only if needed: consistency helps more than time.`)}</span></p>
           ${lbl(tx('Divisão do tempo', 'Time split'))}
-          <div class="space-y-2">${[['leitura', 'menu_book', tx('Leitura', 'Reading')], ['palavras', 'spellcheck', tx('Palavras', 'Words')], ['reforco', 'auto_stories', tx('Reforço', 'Practice')]].map(([key, i, n]) => `<div class="flex items-center gap-3"><span class="w-28 flex items-center gap-1.5 text-label-md text-on-surface">${I(i, 'text-[18px] text-primary')} ${n}</span><input type="range" min="0" max="100" step="5" value="${d.pilares[key]}" data-pil="${key}" class="flex-1"><b class="w-14 text-right text-label-md text-on-surface">${Math.round(d.minutos * d.pilares[key] / tot)} min</b></div>`).join('')}</div>
+          <div class="space-y-2">${[['leitura', 'menu_book', tx('Leitura', 'Reading')], ['palavras', 'spellcheck', tx('Palavras', 'Words')], ['reforco', 'auto_stories', tx('Reforço', 'Practice')]].map(([key, i, n]) => `<div class="flex items-center gap-3"><span class="w-28 flex items-center gap-1.5 text-label-md text-on-surface">${I(i, 'text-[18px] text-primary')} ${n}</span><input type="range" min="10" max="80" step="5" value="${d.pilares[key]}" data-pil="${key}" class="flex-1"><b data-pv="${key}" class="w-14 text-right text-label-md text-on-surface">${Math.round(d.minutos * d.pilares[key] / tot)} min</b></div>`).join('')}</div>
+          <p class="text-body-sm text-on-surface-variant mt-1">${tx('As três partes somam sempre o tempo do dia: ao mexer uma, as outras se ajustam.', 'The three parts always add up to the daily time: move one and the others adjust.')}</p>
           ${lbl(tx('Dias de estudo', 'Study days'))}<div class="flex gap-1.5">${DIAS().map((n, i) => `<button data-dia="${i}" class="w-10 h-10 rounded-full text-label-md ${d.dias.includes(i) ? 'bg-primary-container text-on-primary' : 'bg-surface-container text-on-surface-variant'}">${n}</button>`).join('')}</div>
           ${lbl(A().kids.length > 1 ? tx('PIN da criança (4 números) · recomendado com mais de uma criança', "Child's PIN (4 digits) · recommended with more than one child") : tx('PIN da criança (4 números, opcional)', "Child's PIN (4 digits, optional)"))}<input class="${inputCls} max-w-[180px] tracking-[0.4em] text-center" id="pin" inputmode="numeric" maxlength="4" placeholder="••••">
           ${k ? `<a href="#" id="nopin" class="inline-block mt-2 text-label-sm text-primary underline">${tx('Tirar o PIN', 'Remove PIN')}</a>` : ''}
@@ -347,8 +348,21 @@
       app().querySelectorAll('[data-es]').forEach(b => b.onclick = () => { keep(); d.estilo = b.dataset.es; draw(); });
       app().querySelectorAll('[data-tm]').forEach(b => b.onclick = () => { keep(); d.tema = b.dataset.tm; draw(); });
       app().querySelectorAll('[data-dia]').forEach(b => b.onclick = () => { keep(); const i = +b.dataset.dia; d.dias = d.dias.includes(i) ? d.dias.filter(x => x !== i) : d.dias.concat(i).sort(); draw(); });
-      $('#mn').onchange = e => { keep(); d.minutos = +e.target.value; draw(); }; $('#mn').oninput = e => $('#mv').textContent = e.target.value;
-      app().querySelectorAll('[data-pil]').forEach(r => r.onchange = () => { keep(); d.pilares[r.dataset.pil] = +r.value; draw(); });
+      // tudo atualiza AO VIVO enquanto arrasta (sem redesenhar a tela)
+      const PK = ['leitura', 'palavras', 'reforco'];
+      const showPil = () => { PK.forEach(k => { const b = app().querySelector(`[data-pv="${k}"]`); if (b) b.textContent = Math.round(d.minutos * d.pilares[k] / 100) + ' min'; const r = app().querySelector(`[data-pil="${k}"]`); if (r && +r.value !== d.pilares[k]) r.value = d.pilares[k]; }); };
+      const norm = () => { const t = PK.reduce((a, k) => a + d.pilares[k], 0) || 1; PK.forEach(k => d.pilares[k] = Math.round(d.pilares[k] * 100 / t)); d.pilares.reforco = 100 - d.pilares.leitura - d.pilares.palavras; };
+      norm(); showPil();
+      $('#mn').oninput = e => { d.minutos = +e.target.value; $('#mv').textContent = d.minutos; const a = $('#atv'); if (a) a.textContent = Math.min(40, Math.round(d.minutos * 0.6 + 4)) + ' ' + tx('atividades', 'activities'); showPil(); };
+      $('#mn').onchange = () => { keep(); draw(); };
+      app().querySelectorAll('[data-pil]').forEach(r => r.oninput = () => {
+        const k = r.dataset.pil, v = Math.max(10, Math.min(80, +r.value)), others = PK.filter(x => x !== k);
+        const rest = 100 - v, ot = others.reduce((a, x) => a + d.pilares[x], 0) || 1;
+        d.pilares[k] = v; let left = rest;
+        others.forEach((x, i) => { let nv = i === others.length - 1 ? left : Math.round(rest * d.pilares[x] / ot); nv = Math.max(10, nv); d.pilares[x] = nv; left -= nv; });
+        const sum = PK.reduce((a, x) => a + d.pilares[x], 0); if (sum !== 100) { const big = others.sort((a, b) => d.pilares[b] - d.pilares[a])[0]; d.pilares[big] += 100 - sum; }
+        showPil();
+      });
       const c = $('#cancel'); if (c) c.onclick = () => { tab = 'criancas'; render(); };
       const np = $('#nopin'); if (np) np.onclick = async e => { e.preventDefault(); await DB.rpc('tirar_pin', { crianca: k.id }).then(() => toast('✅')).catch(x => toast(x.message)); };
       const ar = $('#arch'); if (ar) ar.onclick = async e => { e.preventDefault(); if (!confirm(tx(`Remover ${k.apelido}? O progresso fica guardado e pode ser recuperado pelo suporte.`, `Remove ${k.apelido}? Progress is kept and support can restore it.`))) return; await DB.upd('criancas', { eq: { id: k.id } }, { arquivada: true }); await A().loadFamily(); tab = 'criancas'; render(); };
@@ -374,6 +388,7 @@
   }
 
   /* ================= conta e assinatura ================= */
+  const inviteUrl = cod => location.origin + location.pathname.replace(/[^/]*$/, '') + '?convite=' + cod;
   async function conta() {
     const s = A().sub || {};
     const moeda = localStorage.getItem('qk.moeda') || (pt() ? 'brl' : 'usd');
@@ -398,15 +413,17 @@
           <p class="text-label-sm text-on-surface-variant text-center">${moeda === 'brl' ? 'Cartão de crédito ou Pix · Cancele quando quiser' : 'Credit card · Cancel anytime'}</p></section>` : ''}
       </div>
       <div class="space-y-5">
-        <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('group_add', 'text-primary')} ${tx('Outro responsável', 'Another parent')}</h2><p class="text-body-sm text-on-surface-variant">${tx('Convide o pai, a mãe ou outro responsável para ver as mesmas crianças.', 'Invite another parent to see the same kids.')}</p>
-          ${conv.length ? `<div class="bg-surface-container-low rounded-xl p-3"><span class="text-label-sm text-on-surface-variant">${tx('Código', 'Code')}</span><b class="block text-headline-md tracking-[0.2em] text-on-surface">${esc(conv[0].codigo)}</b><span class="text-body-sm text-on-surface-variant break-all">${esc(location.origin + location.pathname + '?convite=' + conv[0].codigo)}</span></div>` : ''}
-          ${btnS('inv', tx('Gerar convite', 'Create invite'), 'link')}
-          <div class="flex gap-2"><input class="${inputCls} uppercase" id="cod" maxlength="8" placeholder="${tx('Recebeu um código?', 'Got a code?')}"><button id="acc" class="h-12 px-5 rounded-xl bg-primary-container text-on-primary text-label-lg">OK</button></div></section>
+        <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('group_add', 'text-primary')} ${tx('Outro responsável', 'Another parent')}</h2>
+          <p class="text-body-sm text-on-surface-variant">${tx('Convide o pai, a mãe ou outro responsável para acompanhar as mesmas crianças. É grátis.', 'Invite another parent to follow the same kids. It’s free.')}</p>
+          ${lbl(tx('E-mail do outro responsável (opcional)', "Other parent's email (optional)"))}
+          <input class="${inputCls}" id="ivm" type="email" autocomplete="off" inputmode="email" placeholder="${tx('ex.: nome@gmail.com', 'e.g. name@gmail.com')}" value="${esc((conv[0] && conv[0].email) || '')}">
+          <p class="text-body-sm text-on-surface-variant -mt-1">${tx('Quando essa pessoa criar a conta ou entrar com este e-mail, ela já entra na sua família, sem código.', 'When this person signs up or logs in with this email, they join your family automatically.')}</p>
+          ${btnP('inv', tx('Enviar convite (WhatsApp, mensagem…)', 'Send invite (WhatsApp, text…)'), 'share')}
+          ${conv.length ? `<details class="bg-surface-container-low rounded-xl p-3"><summary class="text-label-md text-on-surface-variant cursor-pointer">${tx('Ver código e link', 'See code and link')}</summary><b class="block text-headline-md tracking-[0.2em] text-on-surface mt-2">${esc(conv[0].codigo)}</b><span class="text-body-sm text-on-surface-variant break-all">${esc(inviteUrl(conv[0].codigo))}</span><p class="text-body-sm text-on-surface-variant mt-1">${tx('Vale por 3 dias.', 'Valid for 3 days.')}</p></details>` : ''}
+          <details class="pt-1"><summary class="text-label-md text-primary cursor-pointer">${tx('Recebeu um código de outra família?', 'Got a code from another family?')}</summary>
+          <div class="flex gap-2 mt-2"><input class="${inputCls} uppercase" id="cod" maxlength="8" autocapitalize="characters" placeholder="${tx('Código', 'Code')}"><button id="acc" class="h-12 px-5 rounded-xl bg-primary-container text-on-primary text-label-lg">OK</button></div></details></section>
         <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('lock', 'text-primary')} ${tx('Senha dos pais', 'Parents password')}</h2><p class="text-body-sm text-on-surface-variant">${tx('4 números para entrar nesta área. As crianças não devem saber.', '4 digits to enter this area. Keep it from the kids.')}</p>${btnS('senha', tx('Mudar a senha dos pais', 'Change parents password'), 'password')}</section>
-        <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('contrast', 'text-primary')} ${tx('Aparência do painel', 'Panel appearance')}</h2>${seg([['claro', '☀️ ' + tx('Claro', 'Light')], ['escuro', '🌙 ' + tx('Escuro', 'Dark')]], A().temaAtual(), 'data-at')}<p class="text-body-sm text-on-surface-variant">${tx('O tema de cada criança se escolhe em Crianças → Editar, ou no botão ☀️/🌙 da tela dela.', "Each child's theme is set in Kids → Edit, or with the ☀️/🌙 button on their screen.")}</p></section>
-        <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('speed', 'text-primary')} ${tx('Medidor de leitura', 'Reading meter')}</h2>
-          <p class="text-body-sm text-on-surface-variant">${tx('Enquanto a criança lê em voz alta, o reconhecimento de voz do navegador estima palavras por minuto e acertos, e destaca a palavra atual. É uma estimativa. Guardamos só os números, não o texto ouvido.', 'While your child reads aloud, the browser’s speech recognition estimates words per minute and accuracy, and highlights the current word. It is an estimate. We keep only the numbers, not the transcript.')}</p>
-          ${seg([['1', tx('Ligado', 'On')], ['0', tx('Desligado', 'Off')]], localStorage.getItem('qk.medidor') === '0' ? '0' : '1', 'data-med')}</section>
+        <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('volume_up', 'text-primary')} ${tx('Sons do app', 'App sounds')}</h2><p class="text-body-sm text-on-surface-variant">${tx('Sons baixinhos quando a criança acerta, erra ou termina. Ajudam você a perceber que ela está fazendo a lição.', 'Soft sounds when your child gets it right, wrong or finishes. They let you hear the lesson is happening.')}</p>${seg([['1', '🔊 ' + tx('Ligado', 'On')], ['0', '🔇 ' + tx('Desligado', 'Off')]], localStorage.getItem('qk.som') === '0' ? '0' : '1', 'data-som')}</section>
         <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('language', 'text-primary')} ${tx('Idioma do painel', 'Panel language')}</h2>${seg([['pt', 'Português'], ['en', 'English']], QK.lang, 'data-l')}</section>
         <section class="${card} space-y-2"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('help', 'text-primary')} ${tx('Ajuda', 'Help')}</h2>
           <p class="text-body-sm text-on-surface-variant">${tx('Suporte', 'Support')}: <a class="text-primary underline" href="mailto:${C.SUPORTE_EMAIL}">${C.SUPORTE_EMAIL}</a></p>
@@ -415,7 +432,7 @@
           <p class="text-label-sm text-outline">${esc((Auth.user && Auth.user.email) || '')}</p>${btnS('out', t('sair'), 'logout')}</section>
       </div></div>`);
     app().querySelectorAll('[data-m]').forEach(b => b.onclick = () => { localStorage.setItem('qk.moeda', b.dataset.m); render(); });
-    app().querySelectorAll('[data-med]').forEach(b => b.onclick = () => { try { localStorage.setItem('qk.medidor', b.dataset.med); } catch (e) {} render(); });
+    app().querySelectorAll('[data-som]').forEach(b => b.onclick = () => { try { localStorage.setItem('qk.som', b.dataset.som); } catch (e) {} if (b.dataset.som === '1') A().sfx('ok'); render(); });
     app().querySelectorAll('[data-at]').forEach(b => b.onclick = () => { A().setAdultTema(b.dataset.at); render(); });
     app().querySelectorAll('[data-l]').forEach(b => b.onclick = () => { QK.setLang(b.dataset.l); render(); });
     const as = $('#assinar'); if (as) as.onclick = async () => {
@@ -427,8 +444,25 @@
     };
     app().querySelectorAll('input[name=plano]').forEach(r => r.onchange = () => { try { localStorage.setItem('qk.planoEscolhido', r.value); } catch (e) {} });
     const po = $('#portal'); if (po) po.onclick = async () => { try { const r = await DB.fn('portal', { volta: location.origin + location.pathname }); location.href = r.url; } catch (x) { toast(x.message); } };
-    $('#inv').onclick = async () => { try { await DB.del('convites', { eq: { familia_id: A().fam.id } }).catch(() => {}); await DB.ins('convites', { familia_id: A().fam.id }); render(); } catch (x) { toast(x.message); } };
-    $('#acc').onclick = async () => { const c = $('#cod').value.trim(); if (!c) return; try { await DB.rpc('aceitar_convite', { cod: c }); toast('✅'); await A().loadFamily(); A().picker(); } catch (x) { toast(x.message); } };
+    $('#inv').onclick = async () => {
+      const email = $('#ivm').value.trim().toLowerCase();
+      if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast(tx('Confira o e-mail.', 'Check the email.'));
+      let c = conv[0];
+      try {
+        if (!c || (email && c.email !== email) || new Date(c.expira_em) < new Date()) {
+          await DB.del('convites', { eq: { familia_id: A().fam.id } }).catch(() => {});
+          const row = { familia_id: A().fam.id }; if (email) { row.email = email; row.expira_em = new Date(Date.now() + 30 * 864e5).toISOString(); }
+          const r = await DB.ins('convites', row).catch(e => { if (email && /email|column|schema/i.test(e.message)) return DB.ins('convites', { familia_id: A().fam.id }); throw e; });
+          c = r[0];
+        }
+        const url = inviteUrl(c.codigo), kids = A().kids.map(k => k.apelido).join(', ');
+        const msg = tx(`Oi! Entra no Quest Kids para acompanhar ${kids || 'as crianças'} comigo. É só abrir o link e criar sua conta${email ? ' com este e-mail: ' + email : ''}: ${url} (código ${c.codigo}, vale ${email ? '30' : '3'} dias)`, `Hi! Join me on Quest Kids to follow ${kids || 'the kids'}. Open the link and create your account${email ? ' with this email: ' + email : ''}: ${url} (code ${c.codigo}, valid ${email ? 30 : 3} days)`);
+        if (navigator.share) { try { await navigator.share({ title: 'Quest Kids', text: msg }); } catch (e) {} }
+        else window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
+        render();
+      } catch (x) { toast(x.message); }
+    };
+    $('#acc').onclick = async () => { const c = $('#cod').value.trim(); if (!c) return; try { await DB.rpc('aceitar_convite', { cod: c }); toast('✅ ' + tx('Você entrou na família!', 'You joined the family!')); await A().loadFamily(); A().picker(); } catch (x) { toast(A().inviteErr(x), 4500); } };
     $('#senha').onclick = () => A().createParentPass(() => { tab = 'conta'; open().then(() => { tab = 'conta'; render(); }); });
     $('#out').onclick = async () => { await Auth.signOut(); A().boot(); };
   }
