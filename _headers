@@ -13,3 +13,7 @@
 
 /app/pacotes/*/modules/*
   Cache-Control: public, max-age=604800
+
+/enderecos-qk7m2/*
+  X-Robots-Tag: noindex, nofollow
+  Cache-Control: no-cache

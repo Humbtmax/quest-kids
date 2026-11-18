@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow,noarchive"><title>Quest Kids · Endereços</title>
+<style>
+:root{--bg:#f7f9ff;--card:#fff;--tx:#0f1d29;--mut:#5b6b6a;--pri:#14a3a3;--pri2:#006a6a;--line:#dbe8f6;--ok:#e3f8f5}
+@media (prefers-color-scheme:dark){:root{--bg:#0b1326;--card:#121a2e;--tx:#dae2fd;--mut:#9fb0ad;--pri:#2dd4bf;--pri2:#57f1db;--line:#222a3d;--ok:#12332f}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px}
+main{max-width:720px;margin:0 auto}h1{font-size:24px;margin:8px 0 4px}p.sub{color:var(--mut);margin:0 0 16px;font-size:14px}
+section{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 14px 6px;margin-bottom:14px}
+h2{font-size:17px;margin:0 0 8px}.row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}.lbl{font-size:13px;color:var(--mut);margin:0}.url{flex:1;min-width:0;font:13px ui-monospace,Menlo,monospace;overflow-wrap:anywhere}
+.url a{color:var(--tx);text-decoration:none}.flag{font-size:18px}
+button{flex:none;border:0;border-radius:10px;background:var(--pri);color:#fff;font-weight:700;font-size:13px;padding:8px 12px;cursor:pointer}
+button.ok{background:var(--pri2)}.note{font-size:13px;color:var(--mut);background:var(--ok);border-radius:12px;padding:10px;margin:0 0 14px}
+footer{color:var(--mut);font-size:12px;text-align:center;margin:18px 0 30px}
+</style></head><body><main>
+<h1>🚀 Quest Kids · Endereços</h1>
+<p class="sub">Página secreta (não aparece no Google). Toque em <b>Copiar</b> e cole no WhatsApp ou e-mail. Atualizada em <span id="upd">18/11/2026</span>.</p>
+<p class="note">💡 Os links já levam o idioma certo: 🇧🇷 abre em português, 🇺🇸 abre em inglês.</p>
+<div id="lista"></div>
+<footer>Quest Kids · uso interno da Paula</footer>
+</main>
+<script>
+const O = 'https://quest-kids-app.pages.dev';
+const GRUPOS = [
+  ['🛍️ Site de vendas (página inicial)', [['🇧🇷', O + '/'], ['🇺🇸', O + '/en/']]],
+  ['✨ Criar conta (teste grátis)', [['🇧🇷', O + '/app/?criar=1&lang=pt'], ['🇺🇸', O + '/app/?criar=1&lang=en']]],
+  ['🔑 Entrar no app (quem já tem conta)', [['🇧🇷', O + '/app/?lang=pt'], ['🇺🇸', O + '/app/?lang=en']]],
+  ['🧪 Demonstração com dados de exemplo (senha dos pais: 2026)', [['🇧🇷', O + '/app/?demo=gabi&lang=pt'], ['🇺🇸', O + '/app/?demo=gabi&lang=en']]],
+  ['🚪 Sair da demonstração', [['🇧🇷', O + '/app/?demo=0&lang=pt'], ['🇺🇸', O + '/app/?demo=0&lang=en']]],
+  ['🤝 Link de parceiro · RODRIGO', [['🇧🇷', O + '/?ref=RODRIGO'], ['🇺🇸', O + '/en/?ref=RODRIGO']]],
+  ['📜 Termos de Uso', [['🇧🇷', O + '/termos.html'], ['🇺🇸', O + '/termos.html#en']]],
+  ['🔒 Política de Privacidade', [['🇧🇷', O + '/privacidade.html'], ['🇺🇸', O + '/privacidade.html#en']]],
+  ['🛠️ Só para você (pedem login)', [['📊', O + '/app/?lang=pt  →  Área dos pais → Conta → Painel de gestão'], ['🗄️', 'https://supabase.com/dashboard/project/wqpujoymslyajknpkdpe']]]
+];
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+document.getElementById('lista').innerHTML = GRUPOS.map(([t, ls]) => `<section><h2>${t}</h2>${ls.map(([f, u]) => { const link = u.split('  →  ')[0]; return `<div class="row"><span class="flag">${f}</span><span class="url"><a href="${esc(link)}" target="_blank" rel="noopener">${esc(u)}</a></span><button data-c="${esc(link)}">Copiar</button></div>`; }).join('')}</section>`).join('');
+document.querySelectorAll('[data-c]').forEach(b => b.onclick = async () => {
+  const t = b.dataset.c;
+  try { await navigator.clipboard.writeText(t); } catch (e) { const i = document.createElement('textarea'); i.value = t; document.body.appendChild(i); i.select(); document.execCommand('copy'); i.remove(); }
+  b.textContent = 'Copiado ✓'; b.classList.add('ok'); setTimeout(() => { b.textContent = 'Copiar'; b.classList.remove('ok'); }, 1600);
+});
+</script></body></html>
