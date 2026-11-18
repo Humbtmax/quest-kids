@@ -67,7 +67,7 @@
 
   /* ---------- moldura: barra de progresso no topo, botão grande embaixo ---------- */
   function frame({ step, total, back, body, btn, btnOff, foot, inlineBtn }) {
-    A().theme('simples', A().adultTema());
+    A().theme('simples', A().adultTema()); document.body.dataset.area = 'app';
     const pct = total ? Math.round(100 * step / total) : 0;
     const button = btn ? `<button id="nx" type="button" ${btnOff ? 'disabled' : ''} class="btn3d w-full h-14 rounded-2xl bg-primary-container text-on-primary text-headline-md disabled:opacity-40 disabled:shadow-none">${btn}</button>` : '';
     app().innerHTML = `<div class="min-h-[100dvh] flex flex-col max-w-xl mx-auto px-margin">

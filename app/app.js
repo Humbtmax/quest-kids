@@ -4,7 +4,7 @@
   const { t, $, esc, md, today, addDays, shuffle, toast, Auth, DB, C } = QK;
   const A = window.QKApp = { fam: null, sub: null, kids: [], kid: null, eng: null };
   const app = () => $('#app');
-  const view = (html, keep) => { const y = window.scrollY; app().innerHTML = html; window.scrollTo(0, keep ? y : 0); };
+  const view = (html, keep) => { document.body.dataset.area = 'app'; const y = window.scrollY; app().innerHTML = html; window.scrollTo(0, keep ? y : 0); };
   const isPt = () => !(A.kid && A.kid.idioma_app === 'en');
   const kt = k => t(k, isPt() ? 'pt' : 'en');
   const L = (pt, en) => isPt() ? pt : en;                 // textos no idioma da criança
@@ -794,6 +794,9 @@
     try {
       const r = await Promise.race([DB.sel('criancas', { eq: { id: A.kid.id } }), new Promise((_, no) => setTimeout(() => no(new Error('t')), 2500))]);
       if (r && r[0]) { ['minutos', 'pilares', 'dias', 'tema', 'estilo', 'idioma_app'].forEach(k => { if (r[0][k] !== undefined) A.kid[k] = r[0][k]; }); A.eng.child = A.kid; theme(A.kid.estilo, A.kid.tema); }
+      // matérias ativadas/pausadas e modo de estudo mudam na hora (sem precisar fechar o app)
+      const [lic, modo] = await Promise.all([DB.sel('licoes', { eq: { crianca_id: A.kid.id }, order: 'criado_em.desc', limit: 60 }), DB.sel('progresso', { eq: { crianca_id: A.kid.id, chave: 'modo' } }).catch(() => [])]);
+      if (Array.isArray(lic)) { A.eng.setLicoes(lic); A.eng.aplicarModo(modo[0] && modo[0].dados && modo[0].dados.modo); }
     } catch (e) { /* sem internet: usa o que já tem */ }
   }
   async function runLesson(opts) {

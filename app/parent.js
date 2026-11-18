@@ -21,6 +21,7 @@
   const btnS = (id, label, icon) => `<button id="${id}" class="w-full h-12 rounded-2xl bg-surface-container text-on-surface text-label-md flex items-center justify-center gap-2 hover:bg-surface-container-high">${icon ? I(icon, 'text-[20px]') : ''}<span>${label}</span></button>`;
 
   function shell(inner, bare, stay) {
+    document.body.dataset.area = 'pais';
     A().theme('simples', A().adultTema());
     const tabs = [['resumo', 'dashboard', tx('Resumo', 'Summary')], ['corrigir', 'rate_review', tx('Corrigir', 'Review')], ['material', 'photo_camera', tx('Material', 'Material')], ['criancas', 'face', tx('Crianças', 'Kids')], ['conta', 'settings', tx('Conta', 'Account')]];
     view(`<header class="fixed top-0 inset-x-0 z-40 bg-surface/80 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
@@ -449,14 +450,15 @@
       ${byKid.map(({ k, ls }) => { const pr = ((progs.find(p => p.crianca_id === k.id) || {}).dados) || {}, qn = pr.qn || {};
         return `<div class="space-y-3"><div class="flex items-center justify-between gap-2"><span class="text-label-lg text-on-surface">${esc(k.avatar)} ${esc(k.apelido)}</span><span class="flex gap-3"><button data-todas="${k.id}|ativar" class="text-label-sm text-primary underline">${tx('Ativar todas', 'Turn all on')}</button><button data-todas="${k.id}|pausar" class="text-label-sm text-on-surface-variant underline">${tx('Pausar todas', 'Pause all')}</button><button data-zerar="${k.id}" class="text-label-sm text-error underline">${tx('Apagar todas', 'Delete all')}</button></span></div>
         <div class="flex items-center justify-between gap-2 bg-surface-container-low rounded-xl px-3 py-2"><span class="text-body-sm text-on-surface">${tx('Divisão do tempo', 'Time split')}: 📖 ${((k.pilares || {}).leitura) || 40}% · 🔤 ${((k.pilares || {}).palavras) || 25}% · 🧮 ${((k.pilares || {}).reforco) || 35}%</span><button data-edk="${k.id}" class="text-label-sm text-primary underline">${tx('Mudar', 'Change')}</button></div>
-        <p class="text-body-sm text-on-surface-variant">${tx('Só as matérias ativas caem nas lições. Ex.: ative só a matéria da semana e, no fim do mês, ative todas para revisar para a prova.', 'Only active subjects show up in lessons. E.g. turn on only this week’s subject and, at month end, turn all on to review for the test.')}</p>
+        <p class="text-body-sm text-on-surface-variant">${tx('Use o botão <b>Ativa/Pausada</b> de cada matéria: só as ativas caem nas lições. Ex.: deixe ativa só a matéria da semana e, no fim do mês, ative todas para revisar para a prova. Chegou mais conteúdo da mesma matéria? Toque em <b>➕ Adicionar páginas</b> (as perguntas novas entram na mesma matéria).', 'Use each subject’s <b>On/Paused</b> switch: only active subjects show up in lessons. More pages of the same subject? Tap <b>➕ Add pages</b>.')}</p>
         ${ls.map(l => { const c = l.conteudo || {}, qs = (c.questions || []), lid = l.id, seen = qs.reduce((a, q) => a + (qn[q.id] || 0), 0), vistos = qs.filter(q => qn[q.id]).length;
           const its = ts.filter(t => t.crianca_id === k.id).flatMap(t => t.itens || []).filter(i => String(i.qid).replace(/^TV:/, '').startsWith(lid + '-') && i.correct !== null && i.correct !== undefined);
           const acc = its.length ? Math.round(100 * its.filter(i => i.correct).length / its.length) : null;
           const tk = tasks.find(t => t.resultado && t.resultado.licao === lid) || {}, en = tk.entrada || {};
           const rt = ritmo(k, l, pr, seen), pct = qs.length ? Math.round(100 * vistos / qs.length) : 0;
-          return `<div class="${card} space-y-3 ${l.pausada ? 'opacity-60' : ''}">
+          return `<div class="${card} space-y-3 ${l.pausada ? 'opacity-70' : ''}">
             <div class="flex items-start gap-3"><span class="text-[30px] leading-none">${esc(c.icone || '📸')}</span><div class="flex-1 min-w-0">
+              <button data-ltog="${k.id}|${lid}|${l.pausada ? 'ativar' : 'pausar'}" role="switch" aria-checked="${l.pausada ? 'false' : 'true'}" class="float-right ml-2 flex items-center gap-2 text-label-sm ${l.pausada ? 'text-on-surface-variant' : 'text-primary'}"><span>${l.pausada ? tx('Pausada', 'Paused') : tx('Ativa', 'On')}</span><span class="relative inline-block w-12 h-7 rounded-full transition ${l.pausada ? 'bg-surface-container-highest' : 'bg-primary-container'}"><span class="absolute top-1 ${l.pausada ? 'left-1' : 'left-6'} w-5 h-5 rounded-full bg-white shadow transition-all"></span></span></button>
               <div class="flex items-center gap-2 flex-wrap">${c.modo_prova ? `<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed text-label-sm">📝 ${tx('Prova', 'Test')}${c.data_prova ? ' ' + new Date(c.data_prova + 'T12:00').toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' }) : ''}</span>` : `<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface text-label-sm">📘 ${tx('Estudo', 'Study')}</span>`}${l.foco ? `<span class="px-2 py-0.5 rounded-full bg-primary-container text-on-primary text-label-sm">⭐ ${tx('Prioridade', 'Priority')}</span>` : ''}${l.pausada ? `<span class="px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant text-label-sm">⏸ ${tx('Pausada', 'Paused')}</span>` : ''}</div>
               <b class="text-label-lg text-on-surface block mt-1">${esc(l.titulo || c.titulo || '')}</b>
               <span class="text-body-sm text-on-surface-variant">${esc([en.materia, en.obs ? '“' + en.obs + '”' : '', new Date(l.criado_em).toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' })].filter(Boolean).join(' · '))}</span></div></div>
@@ -465,7 +467,7 @@
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button data-perg="${k.id}|${lid}" class="h-11 rounded-xl bg-primary-container text-on-primary text-label-md flex items-center justify-center gap-1.5">${I('quiz', 'text-[18px]')} ${tx('Perguntas', 'Questions')} (${qs.length})</button>
               <button data-lacao="${k.id}|${lid}|${l.foco ? 'desfocar' : 'focar'}" class="h-11 rounded-xl bg-surface-container text-on-surface text-label-md">${l.foco ? tx('Tirar prioridade', 'Remove priority') : '⭐ ' + tx('Priorizar', 'Prioritize')}</button>
-              <button data-lacao="${k.id}|${lid}|${l.pausada ? 'ativar' : 'pausar'}" class="h-11 rounded-xl bg-surface-container text-on-surface text-label-md">${l.pausada ? '▶ ' + tx('Ativar', 'Resume') : '⏸ ' + tx('Pausar', 'Pause')}</button>
+              <button data-addp="${k.id}|${lid}" class="h-11 rounded-xl bg-surface-container text-on-surface text-label-md">➕ ${tx('Adicionar páginas', 'Add pages')}</button>
               <button data-lacao="${k.id}|${lid}|apagar" class="h-11 rounded-xl bg-surface-container text-error text-label-md">🗑 ${tx('Apagar', 'Delete')}</button></div></div>`; }).join('')}</div>`; }).join('')}</section>`;
   }
   function perguntasSheet(lic, prog, ts) {
@@ -499,6 +501,12 @@
   /* ================= enviar material ================= */
   const MAX_ENVIO = 10; // páginas por envio
   let envioLote = null;  // mesmo lote se precisar tentar de novo
+  let envioAlvo = null;  // "Adicionar páginas" numa matéria que já existe
+  function mostrarAlvo() {
+    const b = $('#alvo'); if (!b) return;
+    b.innerHTML = envioAlvo ? `<div class="mt-3 rounded-2xl bg-primary-fixed/30 border-2 border-primary-container p-3 flex items-center gap-2"><span class="text-[22px]">➕</span><span class="flex-1 text-body-md text-on-surface">${tx('Adicionando páginas em', 'Adding pages to')} <b>${esc(envioAlvo.titulo)}</b>. ${tx('As perguntas novas entram nesta mesma matéria.', 'New questions join this same subject.')}</span><button id="alvox" class="text-label-sm text-primary underline">${tx('Criar matéria nova', 'New subject instead')}</button></div>` : '';
+    const x = $('#alvox'); if (x) x.onclick = () => { envioAlvo = null; mostrarAlvo(); };
+  }
   const TIPOS = () => [['estudo', '📘', tx('Estudo do dia a dia', 'Everyday study'), tx('Guia de estudo, lição de casa', 'Study guide, homework')], ['prova', '📝', tx('Cai na prova', 'On the test'), tx('Com a data da prova', 'With the test date')], ['outro', '➕', tx('Outro', 'Other'), tx('Qualquer outro material', 'Anything else')]];
   // insere aceitando banco sem as colunas novas (antes do SQL 05)
   async function insMat(row) {
@@ -537,6 +545,7 @@
         <div class="absolute -top-10 -right-10 w-36 h-36 bg-primary-container/10 rounded-full blur-2xl pointer-events-none"></div>
         <div class="flex items-center gap-3 relative"><div class="w-12 h-12 rounded-2xl bg-primary-container text-on-primary flex items-center justify-center">${I('photo_camera', 'text-[26px]', 1)}</div>
           <div><h1 class="text-headline-lg-mobile text-on-surface">${tx('Enviar material', 'Send material')}</h1><p class="text-body-sm text-on-surface-variant">${tx('Fotos do caderno, do livro ou o PDF da escola.', 'Photos of the notebook, the book or the school PDF.')}</p></div></div>
+        <div id="alvo"></div>
         ${lbl(tx('Para quem', 'For'))}<div class="flex flex-wrap gap-2">${A().kids.map(k => `<label class="cursor-pointer"><input type="radio" name="kid" value="${k.id}" class="peer sr-only" ${k.id === kidSel ? 'checked' : ''}><span class="flex items-center gap-2 px-4 h-12 rounded-full bg-surface-container text-label-md text-on-surface peer-checked:bg-primary-container peer-checked:text-on-primary">${esc(k.avatar)} ${esc(k.apelido)}</span></label>`).join('')}</div>
         ${lbl(tx('O que é este material?', 'What is this material?'))}
         <div class="grid grid-cols-3 gap-2" id="tipos">${TIPOS().map(([v, e, l, d]) => `<button data-tipo="${v}" class="rounded-2xl border-2 p-2.5 text-center flex flex-col items-center gap-1 ${v === tipo ? 'border-primary-container bg-primary-fixed/30' : 'border-surface-container-high bg-surface-container-lowest'}"><span class="text-[26px] leading-none">${e}</span><b class="text-label-md text-on-surface leading-tight">${l}</b><span class="text-[11px] leading-tight text-on-surface-variant hidden sm:block">${d}</span></button>`).join('')}</div>
@@ -594,6 +603,17 @@
     });
     app().querySelectorAll('[data-perg]').forEach(b => b.onclick = () => { const [kid, lid] = b.dataset.perg.split('|'); const l = est.lics.find(x => x.id === lid && x.crianca_id === kid); perguntasSheet(l, ((est.progs.find(p => p.crianca_id === kid) || {}).dados) || {}, est.ts.filter(t => t.crianca_id === kid)); });
     const acao = async (kid, lid, ac) => { try { await DB.rpc('gerir_licao', { crianca: kid, licao: lid, acao: ac }); toast('✅'); material(); } catch (x) { toast(/gerir_licao|function|schema/i.test(x.message) ? tx('Falta rodar o SQL 06 no Supabase para usar isso.', 'Run SQL 06 in Supabase to use this.') : x.message, 4500); } };
+    app().querySelectorAll('[data-ltog]').forEach(b => b.onclick = () => { const [kid, lid, ac] = b.dataset.ltog.split('|'); acao(kid, lid, ac); });
+    app().querySelectorAll('[data-addp]').forEach(b => b.onclick = () => {
+      const [kid, lid] = b.dataset.addp.split('|'); const l = est.lics.find(x => x.id === lid && x.crianca_id === kid); if (!l) return;
+      const c = l.conteudo || {}, tk = est.tasks.find(t => t.resultado && t.resultado.licao === lid) || {}, en = tk.entrada || {};
+      envioAlvo = { kid, lid, titulo: l.titulo || c.titulo || '' };
+      const r = app().querySelector(`input[name=kid][value="${kid}"]`); if (r) r.checked = true;
+      const tp = c.modo_prova ? 'prova' : (en.tipo || 'estudo'); const tb = app().querySelector(`[data-tipo="${tp}"]`); if (tb) tb.click();
+      if (c.data_prova && $('#dp')) $('#dp').value = c.data_prova;
+      $('#mat').value = en.materia || envioAlvo.titulo;
+      mostrarAlvo(); $('#alvo').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
     app().querySelectorAll('[data-lacao]').forEach(b => b.onclick = () => { const [kid, lid, ac] = b.dataset.lacao.split('|'); if (ac === 'apagar' && !confirm(tx('Apagar esta matéria e todas as perguntas dela? Não dá para desfazer.', 'Delete this subject and all its questions? This cannot be undone.'))) return; acao(kid, lid, ac); });
     app().querySelectorAll('[data-todas]').forEach(b => b.onclick = async () => { const [kid, ac] = b.dataset.todas.split('|'); try { for (const l of est.lics.filter(x => x.crianca_id === kid && !!x.pausada === (ac === 'ativar'))) await DB.rpc('gerir_licao', { crianca: kid, licao: l.id, acao: ac }); toast('✅'); material(); } catch (x) { toast(/gerir_licao|function|schema/i.test(x.message) ? tx('Falta rodar o SQL 06 no Supabase para usar isso.', 'Run SQL 06 in Supabase to use this.') : x.message, 4500); } });
     app().querySelectorAll('[data-edk]').forEach(b => b.onclick = () => { const k = A().kids.find(x => x.id === b.dataset.edk); if (k) { tab = 'criancas'; childForm(k); } });
@@ -626,7 +646,9 @@
         }
         pinta(files.length, 0);
         const ids = files.map(f => f._mat).filter(x => x && x !== 'ok');
-        await DB.ins('ia_tarefas', { familia_id: fam, crianca_id: kid, tipo: 'gerar_licao', entrada: { materiais: ids, materia, tipo, obs, modo_prova: prova, data_prova: prova ? dp : null } }).catch(e => console.warn(e));
+        const alvo = envioAlvo && envioAlvo.kid === kid ? envioAlvo.lid : null;
+        await DB.ins('ia_tarefas', { familia_id: fam, crianca_id: kid, tipo: 'gerar_licao', entrada: Object.assign({ materiais: ids, materia, tipo, obs, modo_prova: prova, data_prova: prova ? dp : null }, alvo ? { adicionar_a: alvo } : {}) }).catch(e => console.warn(e));
+        envioAlvo = null;
         DB.fn('ia', {}).catch(() => {});
         envioLote = null;
         toast(tx('✅ Enviado! O Quico já está criando as lições.', '✅ Sent! Quico is already creating the lessons.'), 4000); material();
@@ -877,6 +899,8 @@
       <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface">⚠️ ${tx('Perguntas com problema', 'Questions with problems')}</h2>
         <p class="text-body-sm text-on-surface-variant">${tx('Reportadas pela criança, pelos pais ou pela conferência automática do app. A criança já não vê mais a pergunta; aqui você decide se desativa para sempre.', 'Reported by kids, parents or the automatic check. The child no longer sees it; decide here whether to turn it off for good.')}</p>
         <div id="replist" class="space-y-2"><p class="text-body-sm text-on-surface-variant">…</p></div></section>
+      <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface">💬 ${tx('Dúvidas feitas ao Quico', 'Questions asked to Quico')}</h2>
+        <div id="ajlist" class="space-y-2"><p class="text-body-sm text-on-surface-variant">…</p></div></section>
       <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface">🧮 ${tx('Custo de IA por envio', 'AI cost per upload')}</h2>
         <div id="custlist" class="space-y-2"><p class="text-body-sm text-on-surface-variant">…</p></div></section>
       <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface">👪 ${tx('Contas', 'Accounts')}</h2>
@@ -925,6 +949,13 @@
       bx.querySelectorAll('[data-rres]').forEach(b => b.onclick = async () => { const [id, d2] = b.dataset.rres.split('|'); try { await DB.rpc('admin_resolver_reporte', { rid: +id, desativar: d2 === '1' }); toast('✅'); reps(); } catch (x) { toast(x.message); } });
     };
     reps();
+    (async () => {
+      const bx = $('#ajlist'); if (!bx) return; let a;
+      try { a = await DB.rpc('admin_ajuda'); } catch (x) { bx.innerHTML = `<p class="text-body-sm text-error">${/admin_ajuda|function|schema/i.test(x.message) ? tx('Rode o SQL 10 no Supabase.', 'Run SQL 10 in Supabase.') : esc(x.message)}</p>`; return; }
+      bx.innerHTML = `<p class="text-body-md text-on-surface">${tx('Hoje', 'Today')}: <b>${a.hoje}</b> · ${tx('7 dias', '7 days')}: <b>${a.semana}</b> · ${tx('custo 30 dias', '30-day cost')}: <b>$${(+a.custo30 || 0).toFixed(2)}</b></p>` +
+        ((a.ultimas || []).map(q => `<details class="border-b border-surface-container-high py-1.5"><summary class="text-body-md text-on-surface cursor-pointer">${q.origem === 'site' ? '🛍️' : '👪'} ${esc(String(q.pergunta || '').slice(0, 140))} <span class="text-label-sm text-on-surface-variant">· ${new Date(q.criado_em).toLocaleString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span></summary><p class="text-body-sm text-on-surface-variant mt-1 whitespace-pre-line">${esc(q.resposta || '')}</p></details>`).join('') || `<p class="text-body-sm text-on-surface-variant">${tx('Ninguém perguntou nada ainda.', 'No questions yet.')}</p>`) +
+        `<p class="text-[12px] text-on-surface-variant">🛍️ ${tx('site de vendas', 'sales site')} · 👪 ${tx('Área dos pais', 'Parents area')}. ${tx('Use estas perguntas para melhorar as telas e o site.', 'Use these questions to improve the screens and site.')}</p>`;
+    })();
     (async () => {
       const bx = $('#custlist'); if (!bx) return; let cs = [];
       try { cs = await DB.rpc('admin_custos'); } catch (x) { bx.innerHTML = `<p class="text-body-sm text-error">${sql09(x)}</p>`; return; }
@@ -985,7 +1016,7 @@
           <div class="flex gap-2 mt-2"><input class="${inputCls} uppercase" id="cod" maxlength="8" autocapitalize="characters" placeholder="${tx('Código', 'Code')}"><button id="acc" class="h-12 px-5 rounded-xl bg-primary-container text-on-primary text-label-lg">OK</button></div></details></section>
         ${afp ? parceiroHtml(afp) : ''}
         ${adm === true ? `<button id="gest" class="w-full h-14 rounded-2xl bg-inverse-surface text-inverse-on-surface text-label-lg flex items-center justify-center gap-2">${I('admin_panel_settings', 'text-[22px]')} ${tx('Painel de gestão (só você vê)', 'Admin panel (only you see this)')}</button>` : ''}
-        <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('lock', 'text-primary')} ${tx('Senha dos pais', 'Parents password')}</h2><p class="text-body-sm text-on-surface-variant">${tx('4 números para entrar nesta área. As crianças não devem saber.', '4 digits to enter this area. Keep it from the kids.')}</p>${btnS('senha', tx('Mudar a senha dos pais', 'Change parents password'), 'password')}</section>
+        <section data-senha class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('lock', 'text-primary')} ${tx('Senha dos pais', 'Parents password')}</h2><p class="text-body-sm text-on-surface-variant">${tx('4 números para entrar nesta área. As crianças não devem saber.', '4 digits to enter this area. Keep it from the kids.')}</p>${btnS('senha', tx('Mudar a senha dos pais', 'Change parents password'), 'password')}</section>
         <section class="${card} space-y-3"><h2 class="text-headline-md text-on-surface flex items-center gap-2">${I('public', 'text-primary')} ${tx('Onde a família mora', 'Where your family lives')}</h2>
           <p class="text-body-sm text-on-surface-variant">${tx('Define a moeda dos preços, as formas de pagamento (Pix só no Brasil) e o currículo das lições (BNCC ou americano).', 'Sets the price currency, payment methods (Pix only in Brazil) and the lesson curriculum (Brazilian or US).')}</p>
           ${seg([['BR', '🇧🇷 Brasil'], ['US', '🇺🇸 ' + tx('Estados Unidos', 'United States')]], A().pais(), 'data-pais')}</section>
@@ -1039,5 +1070,15 @@
     $('#out').onclick = async () => { A().fecharPais(); await Auth.signOut(); A().boot(); };
   }
 
-  window.QKParent = { open, newChild };
+  // Quico assistente: leva o pai direto para a tela (e a parte) certa
+  function ir(d) {
+    const M = { material: ['material'], modo: ['material', '[data-modo]'], perguntas: ['material', '[data-perg]'], temas: ['material', '[data-tat], #buytemas'], creditos: ['material', '#buycred'],
+      resumo: ['resumo'], simulado: ['resumo', '#simsave'], corrigir: ['corrigir'], criancas: ['criancas'], nova_crianca: ['criancas', '#novak'], conta: ['conta'],
+      planos: ['conta', '#planos, #portal, #assinar'], convite: ['conta', '#ivm'], parceiro: ['conta', '#afc'], pais: ['conta', '[data-pais]'], senha: ['conta', '[data-senha]'] };
+    const m = M[d]; if (!m) return;
+    if (d === 'nova_crianca') { tab = 'criancas'; newChild(false); return; }
+    tab = m[0]; render();
+    if (m[1]) { let n = 0; const t = setInterval(() => { const el = document.querySelector(m[1]); if (el || ++n > 25) { clearInterval(t); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('ring-4', 'ring-secondary-container', 'rounded-xl'); setTimeout(() => el.classList.remove('ring-4', 'ring-secondary-container'), 2600); } } }, 200); }
+  }
+  window.QKParent = { open, newChild, ir };
 })();

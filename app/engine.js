@@ -30,10 +30,15 @@
     ['completed', 'skills', 'wordbank', 'dias', 'seen', 'counts'].forEach(k => { if (!this.prog[k] || typeof this.prog[k] !== 'object') this.prog[k] = {}; });
     if (!Array.isArray(this.prog.review)) this.prog.review = [];
     if (!Array.isArray(this.prog.badges)) this.prog.badges = [];
-    this.licoes = (licoes || []).filter(l => !l.pausada).map(l => Object.assign({ _ai: true }, l.conteudo, { id: 'AI-' + l.id, criado_em: l.criado_em, para_dia: l.para_dia, foco: !!l.foco }));
-    this.index();
+    this.setLicoes(licoes);
   }
   const E = Engine.prototype;
+  // matérias criadas pela IA (as pausadas pelos pais ficam de fora)
+  E.setLicoes = function (licoes) {
+    this._todas = null;
+    this.licoes = (licoes || []).filter(l => !l.pausada).map(l => Object.assign({ _ai: true }, l.conteudo, { id: 'AI-' + l.id, criado_em: l.criado_em, para_dia: l.para_dia, foco: !!l.foco }));
+    this.index();
+  };
 
   E.base = function (p) { return !p || /^(https?:|data:|blob:|pacotes\/)/.test(p) ? p : `pacotes/${this.pack}/${p}`; };
 
