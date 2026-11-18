@@ -7,7 +7,7 @@
   const tx = (p, e) => pt() ? p : e;
   const I = (n, c, f) => window.QKApp.I(n, c, f);
   const app = () => $('#app');
-  const view = html => { app().innerHTML = html; window.scrollTo(0, 0); };
+  const view = (html, stay) => { const y = window.scrollY; app().innerHTML = html; window.scrollTo(0, stay ? y : 0); };
   let tab = 'resumo', kidSel = null;
 
   const AVATARES = ['🦄', '🐱', '🐶', '🦊', '🐼', '🐯', '🐸', '🦁', '🐧', '🐙', '🦖', '🚀', '⚽', '🎨', '🌸', '⭐', '🌈', '🐬', '🦋', '🤖'];
@@ -20,7 +20,7 @@
   const btnP = (id, label, icon, extra) => `<button id="${id}" class="btn3d w-full h-14 rounded-2xl bg-primary-container text-on-primary text-label-lg flex items-center justify-center gap-2 ${extra || ''}">${icon ? I(icon, 'text-[22px]') : ''}<span>${label}</span></button>`;
   const btnS = (id, label, icon) => `<button id="${id}" class="w-full h-12 rounded-2xl bg-surface-container text-on-surface text-label-md flex items-center justify-center gap-2 hover:bg-surface-container-high">${icon ? I(icon, 'text-[20px]') : ''}<span>${label}</span></button>`;
 
-  function shell(inner, bare) {
+  function shell(inner, bare, stay) {
     A().theme('simples', A().adultTema());
     const tabs = [['resumo', 'dashboard', tx('Resumo', 'Summary')], ['corrigir', 'rate_review', tx('Corrigir', 'Review')], ['material', 'photo_camera', tx('Material', 'Material')], ['criancas', 'face', tx('Crianças', 'Kids')], ['conta', 'settings', tx('Conta', 'Account')]];
     view(`<header class="fixed top-0 inset-x-0 z-40 bg-surface/80 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
@@ -35,7 +35,7 @@
         </div></header>
       <main class="pt-20 pb-32 lg:pb-12 px-margin md:px-margin-tablet max-w-6xl mx-auto">${inner}</main>
       ${bare ? '' : `<nav class="lg:hidden fixed bottom-0 inset-x-0 z-40 pb-safe md:bottom-4 md:px-4"><div class="bg-surface/90 backdrop-blur-xl shadow-[0_-4px_16px_rgba(20,163,163,0.06)] md:shadow-lg md:rounded-3xl md:max-w-xl md:mx-auto grid grid-cols-5 h-20 px-1">
-        ${tabs.map(([k, i, l]) => `<button data-tab="${k}" class="flex flex-col items-center justify-center gap-1 ${tab === k ? 'text-primary' : 'text-on-surface-variant'}">${I(i, 'text-[24px]', tab === k)}<span class="text-label-sm">${l}</span></button>`).join('')}</div></nav>`}`);
+        ${tabs.map(([k, i, l]) => `<button data-tab="${k}" class="flex flex-col items-center justify-center gap-1 ${tab === k ? 'text-primary' : 'text-on-surface-variant'}">${I(i, 'text-[24px]', tab === k)}<span class="text-label-sm">${l}</span></button>`).join('')}</div></nav>`}`, stay);
     $('#back').onclick = () => A().picker();
     $('#ptm').onclick = () => { A().setAdultTema(A().temaAtual() === 'escuro' ? 'claro' : 'escuro'); render(); };
     app().querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { tab = b.dataset.tab; render(); });
@@ -242,6 +242,7 @@
   function childForm(k, first) {
     const d = k ? JSON.parse(JSON.stringify(k)) : { apelido: '', avatar: '🦄', idade: 9, serie: '', idioma_app: QK.lang === 'en' ? 'en' : 'pt-BR', estilo: 'simples', tema: 'claro', minutos: 20, dias: [1, 2, 3, 4, 5], pilares: { leitura: 40, palavras: 25, reforco: 35 } };
     d.pilares = Object.assign({ leitura: 40, palavras: 25, reforco: 35 }, d.pilares || {});
+    let drawn = false;
     const draw = () => {
       const tot = d.pilares.leitura + d.pilares.palavras + d.pilares.reforco || 1;
       shell(`<div class="max-w-2xl mx-auto">
@@ -264,7 +265,7 @@
           <div id="err" class="text-label-md text-error min-h-[1.2em] mt-3"></div>
           <div class="space-y-3 mt-1">${btnP('save', tx('Salvar', 'Save'), 'check')}${!first ? btnS('cancel', tx('Cancelar', 'Cancel')) : ''}</div>
           ${k ? `<p class="text-center mt-5"><a href="#" id="arch" class="text-label-md text-error underline">${tx('Remover esta criança', 'Remove this child')}</a></p>` : ''}
-        </div></div>`, first);
+        </div></div>`, first, drawn); drawn = true;
       const keep = () => { d.apelido = $('#ap').value; d.idade = +$('#id').value || null; d.serie = $('#se').value; };
       app().querySelectorAll('[data-av]').forEach(b => b.onclick = () => { keep(); d.avatar = b.dataset.av; draw(); });
       app().querySelectorAll('[data-lg]').forEach(b => b.onclick = () => { keep(); d.idioma_app = b.dataset.lg; draw(); });

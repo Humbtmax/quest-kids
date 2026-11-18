@@ -556,7 +556,7 @@
       <div class="space-y-1 mb-4">
         <span class="inline-flex items-center gap-1.5 bg-secondary-fixed text-on-secondary-fixed px-3 py-1 rounded-full text-label-sm shadow-sm">${I('auto_stories', 'text-[14px]')} ${aloud ? L('Desafio de leitura · Fluência e entonação', 'Reading challenge · Fluency') : L('Hora da leitura', 'Reading time')}</span>
         <h2 class="text-headline-lg-mobile md:text-headline-lg text-on-surface pt-1">${aloud ? L('Leia o trecho em voz alta!', 'Read this part out loud!') : L('Leia com atenção', 'Read carefully')}</h2>
-        <p class="text-body-md text-on-surface-variant">${aloud ? L('Toque no microfone e leia com calma, no seu ritmo.', 'Tap the mic and read calmly, at your own pace.') : L('Toque nas palavras destacadas para ver o significado.', 'Tap highlighted words to see what they mean.')}</p></div>
+        <p class="text-body-md text-on-surface-variant">${aloud ? L('Toque no microfone 🎤 lá embaixo e leia com calma, no seu ritmo.', 'Tap the mic 🎤 at the bottom and read calmly, at your own pace.') : L('Toque nas palavras destacadas para ver o significado.', 'Tap highlighted words to see what they mean.')}</p></div>
       <div class="flex items-center justify-between gap-2 mb-4 flex-wrap">
         <div class="flex items-center gap-2 bg-surface-container-lowest px-3.5 py-2 rounded-xl shadow-sm min-w-0"><span class="text-[20px]">${esc(R.icon || '📖')}</span><span class="text-label-md text-on-surface truncate">${esc(R.title)}</span></div>
         <button id="ouvir" class="flex items-center gap-2 bg-tertiary-container text-on-tertiary-container px-3.5 py-2 rounded-xl text-label-md shadow-sm active:scale-95 ring-tertiary-fixed">${I('volume_up', 'text-[18px]')}<span>${L('Ouvir exemplo', 'Listen')}</span></button></div>
@@ -568,16 +568,15 @@
         ${R.audio && n === 1 ? `<audio controls preload="none" src="${esc(R.audio)}" class="w-full"></audio>` : ''}
         <div class="flex items-center justify-between text-label-sm text-on-surface-variant bg-surface-container-low px-3 py-2 rounded-xl"><span>💡 ${L('Dica: faça uma pausa suave na vírgula!', 'Tip: pause gently at commas!')}</span><span class="text-primary">${words} ${L('palavras', 'words')}</span></div>
       </div>
-      ${aloud ? `<div class="bg-surface-container-lowest rounded-2xl p-5 shadow-sm mb-5 flex flex-col items-center text-center">
-        <div class="w-full flex items-center justify-between mb-4">
-          <span id="rect" class="flex items-center gap-1.5 bg-surface-container text-on-surface-variant px-3 py-1 rounded-full text-label-sm">${I('mic', 'text-[14px]')} 00:00</span>
-          <span id="sig" class="flex items-center gap-1 text-label-sm text-on-surface-variant">${I('graphic_eq', 'text-[16px] text-primary-container')} ${has ? kt('gravado') : L('Pronto para gravar', 'Ready to record')}</span></div>
-        <div id="wave" class="w-full h-14 bg-surface-container-low rounded-xl flex items-center justify-center gap-1.5 px-4 mb-5 overflow-hidden">${Array.from({ length: 15 }, (x, i) => `<div class="w-1.5 rounded-full ${['bg-primary-container', 'bg-tertiary-container', 'bg-primary'][i % 3]}" style="height:6px"></div>`).join('')}</div>
-        <div class="relative flex items-center justify-center my-2"><div id="ping" class="absolute w-24 h-24 rounded-full bg-error-container opacity-60 hidden animate-ping"></div>
-          <button id="rec" aria-label="Microfone" class="btn3d relative z-10 w-20 h-20 rounded-full bg-primary-container text-on-primary flex items-center justify-center">${I('mic', 'text-[36px]', 1)}</button></div>
-        <p id="recst" class="text-label-md text-on-surface mt-4">${has ? kt('gravado') + ' ' + L('Toque para gravar de novo.', 'Tap to record again.') : L('Toque no microfone para começar', 'Tap the mic to start')}</p>
-        <p class="text-body-sm text-on-surface-variant mt-0.5">${L('Toque de novo para parar', 'Tap again to stop')}</p></div>` : ''}
-      ${lessonBottom(`${btnPrimary('ok', L('Pronto! Continuar', 'Done! Continue'), 'arrow_forward')}`)}`);
+      ${aloud ? '<div class="h-28"></div>' : ''}
+      ${lessonBottom(`${aloud ? `<div class="bg-surface-container-lowest rounded-2xl p-3 shadow-[0_-4px_20px_rgba(0,0,0,0.08)] flex items-center gap-3">
+          <div class="relative flex items-center justify-center shrink-0"><div id="ping" class="absolute w-16 h-16 rounded-full bg-error-container opacity-60 hidden animate-ping"></div>
+            <button id="rec" aria-label="${L('Gravar leitura', 'Record reading')}" class="btn3d relative z-10 w-16 h-16 rounded-full bg-primary-container text-on-primary flex items-center justify-center">${I('mic', 'text-[32px]', 1)}</button></div>
+          <div class="flex-1 min-w-0">
+            <p id="recst" class="text-label-md text-on-surface leading-tight">${has ? kt('gravado') + ' ' + L('Toque para gravar de novo.', 'Tap to record again.') : L('Toque no microfone e leia em voz alta', 'Tap the mic and read out loud')}</p>
+            <div class="flex items-center gap-2 mt-1"><span id="rect" class="flex items-center gap-1 bg-surface-container text-on-surface-variant px-2 py-0.5 rounded-full text-label-sm">${I('mic', 'text-[12px]')} 00:00</span><span id="sig" class="flex items-center gap-1 text-label-sm text-on-surface-variant truncate">${has ? kt('gravado') : L('Toque de novo para parar', 'Tap again to stop')}</span></div>
+            <div id="wave" class="w-full h-7 mt-1 flex items-center gap-1 overflow-hidden">${Array.from({ length: 18 }, (x, i) => `<div class="w-1.5 rounded-full ${['bg-primary-container', 'bg-tertiary-container', 'bg-primary'][i % 3]}" style="height:4px"></div>`).join('')}</div>
+          </div></div>` : ''}${btnPrimary('ok', L('Pronto! Continuar', 'Done! Continue'), 'arrow_forward')}`)}`);
     wireTop();
     $('#ouvir').onclick = ev => R.audio && n === 1 ? (app().querySelector('audio') || {}).play && app().querySelector('audio').play() : speak(text, ev.currentTarget);
     if (aloud) $('#rec').onclick = () => toggleRec(n);
@@ -604,7 +603,7 @@
       const bars = [...app().querySelectorAll('#wave > div')];
       const loop = () => {
         const s = Math.floor((Date.now() - t0) / 1000); if (timer) timer.innerHTML = `<span class="w-2 h-2 rounded-full bg-error animate-ping"></span> 🔴 ${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-        if (an) { an.getByteFrequencyData(data); bars.forEach((b, i) => { b.style.height = Math.max(6, Math.min(48, (data[i + 1] || 0) / 4.5)) + 'px'; }); const avg = data.reduce((a, b) => a + b, 0) / data.length; if (sig) sig.innerHTML = `${I('graphic_eq', 'text-[16px] text-primary-container')} ${avg > 25 ? L('Sinal do microfone ótimo', 'Great mic signal') : L('Fale um pouco mais alto', 'Speak a bit louder')}`; }
+        if (an) { an.getByteFrequencyData(data); bars.forEach((b, i) => { b.style.height = Math.max(4, Math.min(26, (data[i + 1] || 0) / 8)) + 'px'; }); const avg = data.reduce((a, b) => a + b, 0) / data.length; if (sig) sig.innerHTML = `${I('graphic_eq', 'text-[16px] text-primary-container')} ${avg > 25 ? L('Sinal do microfone ótimo', 'Great mic signal') : L('Fale um pouco mais alto', 'Speak a bit louder')}`; }
         raf = requestAnimationFrame(loop);
       };
       rec.ondataavailable = ev => ev.data.size && chunks.push(ev.data);
