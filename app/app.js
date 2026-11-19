@@ -802,8 +802,24 @@
       if (r && r[0]) { ['minutos', 'pilares', 'dias', 'tema', 'estilo', 'idioma_app'].forEach(k => { if (r[0][k] !== undefined) A.kid[k] = r[0][k]; }); A.eng.child = A.kid; theme(A.kid.estilo, A.kid.tema); }
       // matérias ativadas/pausadas e modo de estudo mudam na hora (sem precisar fechar o app)
       const [lic, modo] = await Promise.all([DB.sel('licoes', { eq: { crianca_id: A.kid.id }, order: 'criado_em.desc', limit: 60 }), DB.sel('progresso', { eq: { crianca_id: A.kid.id, chave: 'modo' } }).catch(() => [])]);
-      if (Array.isArray(lic)) { A.eng.setLicoes(lic); A.eng.aplicarModo(modo[0] && modo[0].dados && modo[0].dados.modo); }
+      if (Array.isArray(lic)) { A.eng.setLicoes(lic); A.eng.aplicarModo(modo[0] && modo[0].dados && modo[0].dados.modo); maisAuto(lic); }
     } catch (e) { /* sem internet: usa o que já tem */ }
+  }
+  // matéria quase toda vista (70%+): pede mais perguntas à IA sozinho, sem a criança perceber (no máx. 1 vez a cada 6 h por matéria)
+  function maisAuto(lics) {
+    if (QK.DEMO || !A.eng || !A.eng.prog) return;
+    const qn = A.eng.prog.qn || {};
+    for (const l of lics) {
+      const c = l.conteudo || {}; if (l.pausada || !c.notas) continue;
+      const qs = (c.questions || []).filter(q => q.pilar !== 'leitura'); if (!qs.length || qs.length >= 220) continue;
+      if (qs.filter(q => qn[q.id]).length / qs.length < 0.7) continue;
+      if (c.mais_em && Date.now() - new Date(c.mais_em).getTime() < 6 * 3600e3) continue;
+      const k = 'qk.mais.' + l.id; let t = 0; try { t = +localStorage.getItem(k) || 0; } catch (e) {}
+      if (Date.now() - t < 6 * 3600e3) continue;
+      try { localStorage.setItem(k, String(Date.now())); } catch (e) {}
+      DB.fn('ia', { acao: 'mais_perguntas', crianca: A.kid.id, licao: l.id, auto: true }).catch(() => {});
+      break;   // uma matéria por vez
+    }
   }
   async function runLesson(opts) {
     if (!A.planOk()) return toast(kt('planoVencido'));

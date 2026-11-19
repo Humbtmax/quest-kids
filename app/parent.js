@@ -454,7 +454,7 @@
         ${ls.map(l => { const c = l.conteudo || {}, qs = (c.questions || []), lid = l.id, seen = qs.reduce((a, q) => a + (qn[q.id] || 0), 0), vistos = qs.filter(q => qn[q.id]).length;
           const its = ts.filter(t => t.crianca_id === k.id).flatMap(t => t.itens || []).filter(i => String(i.qid).replace(/^TV:/, '').startsWith(lid + '-') && i.correct !== null && i.correct !== undefined);
           const acc = its.length ? Math.round(100 * its.filter(i => i.correct).length / its.length) : null;
-          const tk = tasks.find(t => t.resultado && t.resultado.licao === lid) || {}, en = tk.entrada || {};
+          const tk = tasks.find(t => t.tipo !== 'mais_perguntas' && t.resultado && t.resultado.licao === lid) || {}, en = tk.entrada || {};
           const rt = ritmo(k, l, pr, seen), pct = qs.length ? Math.round(100 * vistos / qs.length) : 0;
           return `<div class="${card} space-y-3 ${l.pausada ? 'opacity-70' : ''}">
             <div class="flex items-start gap-3"><span class="text-[30px] leading-none">${esc(c.icone || '📸')}</span><div class="flex-1 min-w-0">
@@ -464,11 +464,32 @@
               <span class="text-body-sm text-on-surface-variant">${esc([en.materia, en.obs ? '“' + en.obs + '”' : '', new Date(l.criado_em).toLocaleDateString(pt() ? 'pt-BR' : 'en-US', { day: '2-digit', month: 'short' })].filter(Boolean).join(' · '))}</span></div></div>
             <div><div class="flex justify-between text-label-sm text-on-surface-variant mb-1"><span>${vistos}/${qs.length} ${tx('perguntas já vistas', 'questions seen')}</span><span>${acc === null ? '' : tx('Acertos', 'Accuracy') + ': ' + acc + '%'}</span></div><div class="h-2.5 bg-surface-container-high rounded-full overflow-hidden"><div class="h-full bg-primary-container rounded-full" style="width:${pct}%"></div></div></div>
             <p class="text-body-sm ${rt.ok ? 'text-on-surface' : 'text-error'} bg-surface-container-low rounded-xl p-3 flex gap-2">${I(rt.ok ? 'insights' : 'warning', 'text-[18px] shrink-0 ' + (rt.ok ? 'text-primary' : 'text-error'))}<span>${rt.msg}</span></p>
+            ${coberturaHtml(c, k.id, lid)}
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button data-perg="${k.id}|${lid}" class="h-11 rounded-xl bg-primary-container text-on-primary text-label-md flex items-center justify-center gap-1.5">${I('quiz', 'text-[18px]')} ${tx('Perguntas', 'Questions')} (${qs.length})</button>
               <button data-lacao="${k.id}|${lid}|${l.foco ? 'desfocar' : 'focar'}" class="h-11 rounded-xl bg-surface-container text-on-surface text-label-md">${l.foco ? tx('Tirar prioridade', 'Remove priority') : '⭐ ' + tx('Priorizar', 'Prioritize')}</button>
               <button data-addp="${k.id}|${lid}" class="h-11 rounded-xl bg-surface-container text-on-surface text-label-md">➕ ${tx('Adicionar páginas', 'Add pages')}</button>
               <button data-lacao="${k.id}|${lid}|apagar" class="h-11 rounded-xl bg-surface-container text-error text-label-md">🗑 ${tx('Apagar', 'Delete')}</button></div></div>`; }).join('')}</div>`; }).join('')}</section>`;
+  }
+  // cobertura da matéria: cada tópico com quantas perguntas e de quantos tipos (a IA garante 4+ perguntas e 3+ tipos por tópico)
+  const FORM_NOME = { escolha: ['Múltipla escolha', 'Multiple choice'], vf: ['Verdadeiro ou falso', 'True or false'], completar: ['Completar a frase', 'Fill in the blank'], nao_e: ['Qual NÃO é', 'Which is NOT'], conta: ['Contas', 'Math'], ordem: ['Colocar em ordem', 'Put in order'], separar: ['Separar em grupos', 'Sort into groups'], leitura: ['Leitura', 'Reading'] };
+  const normT = s => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  function formatoDe(q) {
+    if (q.formato) return q.formato; if (q.pilar === 'leitura') return 'leitura';
+    if (q.type === 'num') return 'conta'; if (q.type === 'order') return 'ordem'; if (q.type === 'sort') return 'separar';
+    const p = String(q.prompt || '').toLowerCase();
+    return /verdadeiro ou falso|true or false/.test(p) ? 'vf' : /complete|____/.test(p) ? 'completar' : /\bn[ãa]o\b.*\?|\bnot\b/.test(p) ? 'nao_e' : 'escolha';
+  }
+  function coberturaHtml(c, kid, lid) {
+    const qs = (c.questions || []).filter(q => q.pilar !== 'leitura' && !q.off);
+    const nomes = (c.topicos || []).length ? c.topicos.map(t => t.nome) : [...new Set(qs.map(q => q.topico || q.skill).filter(Boolean))];
+    const lista = nomes.map(n => { const l = qs.filter(q => normT(q.topico || q.skill) === normT(n)); return { nome: n, n: l.length, f: [...new Set(l.map(formatoDe))] }; });
+    const forms = [...new Set(qs.map(formatoDe))];
+    return `<details class="bg-surface-container-low rounded-xl p-3"><summary class="cursor-pointer text-label-md text-on-surface">📚 ${tx('Cobertura da matéria', 'Topic coverage')}: ${lista.length} ${tx('tópicos', 'topics')} · ${forms.length} ${tx('tipos de pergunta', 'question types')}</summary>
+      <div class="mt-2 space-y-1.5">${lista.map(x => `<div class="flex items-start justify-between gap-3 text-body-sm"><span class="text-on-surface">${x.n >= 4 && x.f.length >= 3 ? '✅' : '⚠️'} ${esc(x.nome)}</span><span class="text-on-surface-variant text-right shrink-0">${x.n} ${tx('perguntas', 'questions')} · ${x.f.length} ${tx('tipos', 'types')}</span></div>`).join('')}
+      <p class="text-label-sm text-on-surface-variant pt-1">${tx('Tipos', 'Types')}: ${forms.map(f => (FORM_NOME[f] || [f, f])[pt() ? 0 : 1]).join(' · ')}</p></div></details>
+      ${c.notas ? `<button data-mais="${kid}|${lid}" class="w-full h-11 rounded-xl bg-secondary-container text-on-secondary-container text-label-md flex items-center justify-center gap-2">✨ ${tx('Gerar mais perguntas desta matéria', 'Generate more questions for this topic')}</button>
+      <p class="text-label-sm text-on-surface-variant -mt-1">${tx('Quando a criança já viu quase todas as perguntas, o app também pede mais sozinho.', 'When your child has seen almost every question, the app also asks for more by itself.')}</p>` : ''}`;
   }
   function perguntasSheet(lic, prog, ts) {
     const c = lic.conteudo || {}, qs = c.questions || [], qn = (prog && prog.qn) || {};
@@ -604,9 +625,19 @@
     app().querySelectorAll('[data-perg]').forEach(b => b.onclick = () => { const [kid, lid] = b.dataset.perg.split('|'); const l = est.lics.find(x => x.id === lid && x.crianca_id === kid); perguntasSheet(l, ((est.progs.find(p => p.crianca_id === kid) || {}).dados) || {}, est.ts.filter(t => t.crianca_id === kid)); });
     const acao = async (kid, lid, ac) => { try { await DB.rpc('gerir_licao', { crianca: kid, licao: lid, acao: ac }); toast('✅'); material(); } catch (x) { toast(/gerir_licao|function|schema/i.test(x.message) ? tx('Falta rodar o SQL 06 no Supabase para usar isso.', 'Run SQL 06 in Supabase to use this.') : x.message, 4500); } };
     app().querySelectorAll('[data-ltog]').forEach(b => b.onclick = () => { const [kid, lid, ac] = b.dataset.ltog.split('|'); acao(kid, lid, ac); });
+    app().querySelectorAll('[data-mais]').forEach(b => b.onclick = async () => {
+      const [kid, lid] = b.dataset.mais.split('|'); const txt0 = b.innerHTML;
+      b.disabled = true; b.innerHTML = `<span class="qk-ampulheta">⏳</span> ${tx('Criando perguntas novas… (até 1 minuto)', 'Creating new questions… (up to 1 minute)')}`;
+      try {
+        const r = await DB.fn('ia', { acao: 'mais_perguntas', crianca: kid, licao: lid });
+        if (r && r.status === 'ok') { toast(tx(`✨ ${r.novas} perguntas novas! Agora são ${r.total}.`, `✨ ${r.novas} new questions! Now ${r.total} in total.`)); return material(); }
+        toast(({ cedo: tx('Acabamos de criar perguntas para esta matéria. Tente de novo em alguns minutos.', 'We just created questions for this topic. Try again in a few minutes.'), limite: tx('Esta matéria já tem o máximo de perguntas.', 'This topic already has the maximum number of questions.'), sem_notas: tx('Esta matéria é antiga: mande as páginas de novo (Adicionar páginas) para criar mais.', 'This is an older topic: send the pages again (Add pages) to create more.'), ia_desligada: tx('A IA está desligada no momento.', 'The AI is off right now.') })[r && r.status] || tx('Não deu certo agora. Tente de novo.', 'That did not work. Please try again.'));
+      } catch (x) { toast(tx('Não deu certo agora. Tente de novo.', 'That did not work. Please try again.')); }
+      b.disabled = false; b.innerHTML = txt0;
+    });
     app().querySelectorAll('[data-addp]').forEach(b => b.onclick = () => {
       const [kid, lid] = b.dataset.addp.split('|'); const l = est.lics.find(x => x.id === lid && x.crianca_id === kid); if (!l) return;
-      const c = l.conteudo || {}, tk = est.tasks.find(t => t.resultado && t.resultado.licao === lid) || {}, en = tk.entrada || {};
+      const c = l.conteudo || {}, tk = est.tasks.find(t => t.tipo !== 'mais_perguntas' && t.resultado && t.resultado.licao === lid) || {}, en = tk.entrada || {};
       envioAlvo = { kid, lid, titulo: l.titulo || c.titulo || '' };
       const r = app().querySelector(`input[name=kid][value="${kid}"]`); if (r) r.checked = true;
       const tp = c.modo_prova ? 'prova' : (en.tipo || 'estudo'); const tb = app().querySelector(`[data-tipo="${tp}"]`); if (tb) tb.click();
@@ -974,8 +1005,8 @@
       const tot = cs.reduce((a, c) => a + (+c.usd || 0), 0), pags = cs.reduce((a, c) => a + (+c.paginas || 0), 0);
       bx.innerHTML = cs.length ? `<p class="text-body-md text-on-surface">${tx('Últimos', 'Last')} ${cs.length} ${tx('envios', 'uploads')}: <b>$${tot.toFixed(2)}</b> · ${tx('média por envio', 'avg per upload')} <b>$${(tot / cs.length).toFixed(3)}</b> · ${tx('por página', 'per page')} <b>$${pags ? (tot / pags).toFixed(3) : '—'}</b></p>
         <div class="overflow-x-auto"><table class="w-full text-body-sm"><thead><tr class="text-left text-on-surface-variant"><th class="py-1 pr-2">${tx('Data', 'Date')}</th><th class="pr-2">${tx('Família', 'Family')}</th><th class="pr-2">${tx('Págs', 'Pages')}</th><th class="pr-2">${tx('Perg.', 'Qs')}</th><th class="pr-2">Tokens</th><th>US$</th></tr></thead><tbody>
-        ${cs.map(c => `<tr class="border-t border-surface-container-high"><td class="py-1 pr-2 whitespace-nowrap">${new Date(c.feito_em).toLocaleDateString(pt() ? 'pt-BR' : 'en-US')}</td><td class="pr-2 max-w-[140px] truncate">${esc(c.email || '—')}</td><td class="pr-2">${c.paginas ?? '—'}</td><td class="pr-2">${c.perguntas ?? '—'}${c.removidas ? ` <span class="text-error">(−${c.removidas})</span>` : ''}</td><td class="pr-2 whitespace-nowrap">${c.tok_in ? Math.round(c.tok_in / 1000) + 'k / ' + Math.round((c.tok_out || 0) / 1000) + 'k' : '—'}</td><td>${c.usd != null ? (+c.usd).toFixed(3) : '—'}</td></tr>`).join('')}</tbody></table></div>
-        <p class="text-[12px] text-on-surface-variant">${tx('Tokens: entrada / saída. "−N" = perguntas descartadas pela dupla conferência. Envios antigos (antes de hoje) não têm tokens.', 'Tokens: input / output. "−N" = questions discarded by the double check. Older uploads have no token data.')}</p>` : `<p class="text-body-sm text-on-surface-variant">—</p>`;
+        ${cs.map(c => `<tr class="border-t border-surface-container-high"><td class="py-1 pr-2 whitespace-nowrap">${new Date(c.feito_em).toLocaleDateString(pt() ? 'pt-BR' : 'en-US')}</td><td class="pr-2 max-w-[140px] truncate">${esc(c.email || '—')}</td><td class="pr-2">${c.tipo === 'mais_perguntas' ? '✨' : (c.paginas ?? '—')}</td><td class="pr-2">${c.perguntas ?? '—'}${c.removidas ? ` <span class="text-error">(−${c.removidas})</span>` : ''}${c.topicos ? `<br><span class="text-[11px] text-on-surface-variant">${c.topicos} ${tx('tóp.', 'topics')} · ${c.formatos} ${tx('tipos', 'types')}</span>` : ''}</td><td class="pr-2 whitespace-nowrap">${c.tok_in ? Math.round(c.tok_in / 1000) + 'k / ' + Math.round((c.tok_out || 0) / 1000) + 'k' : '—'}</td><td>${c.usd != null ? (+c.usd).toFixed(3) : '—'}</td></tr>`).join('')}</tbody></table></div>
+        <p class="text-[12px] text-on-surface-variant">${tx('Tokens: entrada / saída. "−N" = perguntas descartadas pela dupla conferência (com problema ou repetidas). ✨ = "gerar mais perguntas" (não gasta páginas). Embaixo: tópicos da matéria e tipos de pergunta.', 'Tokens: input / output. "−N" = questions discarded by the double check (broken or repeated). ✨ = "generate more questions" (uses no pages). Below: topics and question types.')}</p>` : `<p class="text-body-sm text-on-surface-variant">—</p>`;
     })();
     const pg = $('#pagar'); if (pg) pg.onclick = async () => { if (!confirm(tx('Marcar todas as comissões listadas como pagas? Faça isso depois de enviar os PIX.', 'Mark all listed commissions as paid? Do this after sending payouts.'))) return; try { await DB.rpc('admin_pagar_comissao', { ids: d.comissoes.map(x => x.id) }); toast('✅'); render(); } catch (x) { toast(x.message); } };
     $('#tsave').onclick = async () => {
