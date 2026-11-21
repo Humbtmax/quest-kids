@@ -35,7 +35,7 @@ input[type=range] { accent-color: rgb(var(--c-primary-container)); width: 100%; 
 #app .grid > * { min-width: 0; }
 @keyframes qkpop { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
 .meter-miss { text-decoration: underline wavy rgb(230 140 0); text-underline-offset: 4px; }
-html, body { overflow-x: hidden; }
+html, body { overflow-x: clip; }  /* clip (não "hidden"): hidden transformava o body num quadro de rolagem e, com overscroll-behavior none, a rodinha do mouse travava */
 #app { overflow-x: clip; }
 .cheer-burst { position: fixed; left: 50%; top: 42%; width: 0; height: 0; z-index: 80; pointer-events: none; }
 .cheer-burst i { position: absolute; width: 8px; height: 8px; border-radius: 2px; animation: qkburst .9s ease-out forwards; }
